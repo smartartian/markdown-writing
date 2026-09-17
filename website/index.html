@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Markdown Writing 是一个本地优先的 Markdown 桌面写作工具，文档留在磁盘，打开即写，导出无忧。">
+  <title>Markdown Writing - 把写作留给文字</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header" id="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="#top" aria-label="Markdown Writing 首页">
+        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <span>Markdown Writing</span>
+      </a>
+      <nav class="desktop-nav" aria-label="主导航">
+        <a href="#features">功能</a>
+        <a href="#workflow">工作流</a>
+        <a href="#export">导出</a>
+        <a href="./updates.html">更新记录</a>
+        <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="button button-small button-dark" href="#download">
+          <i data-lucide="download"></i>
+          下载
+        </a>
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-expanded="false">
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
+      <a href="#features">功能</a>
+      <a href="#workflow">工作流</a>
+      <a href="#export">导出</a>
+      <a href="./updates.html">更新记录</a>
+      <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="#download">下载桌面版</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero section-shell">
+      <div class="hero-copy reveal">
+        <span class="eyebrow">本地优先的 Markdown 桌面写作工具</span>
+        <h1>把写作，<br>留给文字。</h1>
+        <p>文档留在磁盘，打开即写，格式随文字自然生长。 Markdown Writing 将专注、本地存储和可靠导出放回同一个安静的工作台。</p>
+        <div class="hero-actions">
+          <a class="button button-dark" href="#download">
+            <i data-lucide="monitor-down"></i>
+            获取桌面版
+          </a>
+          <a class="button button-light" href="#features">
+            探索核心功能
+            <i data-lucide="arrow-down"></i>
+          </a>
+        </div>
+        <div class="hero-meta" aria-label="产品特性">
+          <span><i data-lucide="hard-drive"></i>本地文件</span>
+          <span><i data-lucide="shield-check"></i>原子保存</span>
+          <span><i data-lucide="file-code-2"></i>源文可控</span>
+        </div>
+      </div>
+
+      <div class="product-stage reveal">
+        <div class="stage-glow stage-glow-one"></div>
+        <div class="stage-glow stage-glow-two"></div>
+        <article class="app-window" aria-label="Markdown Writing 应用界面预览">
+          <div class="window-bar">
+            <div class="traffic-lights" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="window-title">Markdown Writing / 写作计划.md</span>
+            <span class="window-mode"><i data-lucide="eye"></i>实时预览</span>
+          </div>
+          <div class="window-body">
+            <aside class="mock-sidebar">
+              <div class="mock-library-title">文档库</div>
+              <div class="mock-tree-item"><i data-lucide="folder-open"></i> essays</div>
+              <div class="mock-tree-item active"><i data-lucide="file-text"></i> 写作计划.md</div>
+              <div class="mock-tree-item"><i data-lucide="file-text"></i> 产品手记.md</div>
+              <div class="mock-tree-item"><i data-lucide="file-text"></i> release-notes.md</div>
+            </aside>
+            <div class="mock-editor">
+              <div class="mock-doc-meta">
+                <span>写作计划.md</span>
+                <span>已保存</span>
+              </div>
+              <h2>把注意力留给正在发生的句子</h2>
+              <blockquote>没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。</blockquote>
+              <p>写作应当接近纸面：打开即写，内容留存在本地。需要时再导出为文档、图片或 PDF。</p>
+              <div class="mock-code-card">
+                <div class="mock-code-head">
+                  <span>today.md</span>
+                  <span>Live Preview</span>
+                </div>
+                <pre><code>## 今日写作
+
+- [x] 完成官网首屏
+- [ ] 整理发布说明
+</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="mock-statusbar">
+            <span><i data-lucide="code-2"></i>源码</span>
+            <span>字数 1288 · 自动保存</span>
+          </div>
+        </article>
+
+        <div class="floating-note note-left">
+          <span class="floating-icon"><i data-lucide="pen-line"></i></span>
+          <span><strong>打开即写</strong><small>不等待加载，不打断思路</small></span>
+        </div>
+        <div class="floating-note note-right">
+          <span class="floating-icon warm"><i data-lucide="save"></i></span>
+          <span><strong>安心保存</strong><small>临时文件写入后原子替换</small></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="quiet-strip">
+      <div class="section-shell quiet-strip-inner">
+        <span>Local First</span>
+        <span>Markdown Native</span>
+        <span>Open Source</span>
+        <span>macOS Desktop</span>
+      </div>
+    </section>
+
+    <section class="section-shell section-block" id="features">
+      <div class="section-heading centered reveal">
+        <span class="eyebrow">为长时间写作而设计</span>
+        <h2>安静的界面，清晰的取舍。</h2>
+        <p>Markdown Writing 不试图成为所有工具的集合。它只处理文档、编辑、保存和导出，并且把每一件事做得可预期。</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="hard-drive"></i></span>
+          <h3>本地文件优先</h3>
+          <p>文档以 Markdown 文件保存在自己的文件夹里，不被锁进平台，也不依赖网络。</p>
+        </article>
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="panels-top-left"></i></span>
+          <h3>块编辑与源码并存</h3>
+          <p>在富文本视图里自然书写，需要时切回源文，结构始终由用户掌握。</p>
+        </article>
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="file-search"></i></span>
+          <h3>文档树和大纲</h3>
+          <p>按文件夹管理稿件，点击大纲快速定位标题，让长文依然容易巡航。</p>
+        </article>
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="refresh-cw"></i></span>
+          <h3>稳定的自动保存</h3>
+          <p>保存请求按顺序执行，写入使用临时文件和原子替换，降低异常中断的风险。</p>
+        </article>
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="download"></i></span>
+          <h3>多格式导出</h3>
+          <p>支持 Markdown、纯文本、PNG、PDF 和 Word 可打开的文档格式。</p>
+        </article>
+        <article class="feature-card reveal">
+          <span class="feature-icon"><i data-lucide="shield-check"></i></span>
+          <h3>内容安全边界</h3>
+          <p>渲染内容经过净化，桌面文件操作限制在用户授权的目录和打开过的文件。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="workflow-band" id="workflow">
+      <div class="section-shell workflow-layout">
+        <div class="workflow-copy reveal">
+          <span class="eyebrow">从想法到交付</span>
+          <h2>一条不打断思路的写作路径。</h2>
+          <p>打开一个文件夹，建立自己的文档结构。写作、保存和导出都在同一个视图中完成，不需要在工具之间搬运内容。</p>
+          <div class="workflow-steps">
+            <div class="workflow-step">
+              <span>01</span>
+              <div><strong>选择文档目录</strong><p>文章以普通 `.md` 文件保存在本地。</p></div>
+            </div>
+            <div class="workflow-step">
+              <span>02</span>
+              <div><strong>专注写作</strong><p>块视图适合排版，源码视图适合精确控制。</p></div>
+            </div>
+            <div class="workflow-step">
+              <span>03</span>
+              <div><strong>直接交付</strong><p>按需要导出，原文件和结构仍然属于自己。</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="workflow-visual reveal">
+          <div class="timeline-card">
+            <div class="timeline-line"></div>
+            <div class="timeline-node">
+              <span><i data-lucide="folder-open"></i></span>
+              <div><strong>选择文件夹</strong><small>docs / essays / release-notes</small></div>
+            </div>
+            <div class="timeline-node">
+              <span><i data-lucide="pen-line"></i></span>
+              <div><strong>开始写作</strong><small>自动保存 · Markdown 源文保留</small></div>
+            </div>
+            <div class="timeline-node">
+              <span><i data-lucide="package-check"></i></span>
+              <div><strong>导出交付</strong><small>Markdown · PDF · PNG · Word</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell section-block" id="export">
+      <div class="section-heading centered reveal">
+        <span class="eyebrow">Markdown 是起点，不是终点</span>
+        <h2>一篇内容，多种去向。</h2>
+        <p>文件始终是自己的，需要分享或归档时，再选择最合适的格式。</p>
+      </div>
+      <div class="export-grid">
+        <article class="export-card reveal">
+          <span class="export-file">.md</span>
+          <h3>Markdown</h3>
+          <p>保留最完整、最可迁移的原始内容。</p>
+        </article>
+        <article class="export-card reveal">
+          <span class="export-file">.pdf</span>
+          <h3>PDF</h3>
+          <p>适合阅读、打印和稳定分享。</p>
+        </article>
+        <article class="export-card reveal">
+          <span class="export-file">.png</span>
+          <h3>PNG</h3>
+          <p>快速生成适合社交平台和演示的图片。</p>
+        </article>
+        <article class="export-card reveal">
+          <span class="export-file">.doc</span>
+          <h3>Word</h3>
+          <p>交付给仍然依赖 Office 文档的流程。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="download-band" id="download">
+      <div class="section-shell download-inner reveal">
+        <div>
+          <span class="eyebrow light">MARKDOWN WRITING 0.0.1</span>
+          <h2>把下一篇文章，写在自己的磁盘上。</h2>
+          <p>下载桌面版，选择一个文件夹，然后直接开始。</p>
+        </div>
+        <div class="download-actions">
+          <a class="button button-paper" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+            <i data-lucide="download"></i>
+            下载 macOS 版
+          </a>
+          <a class="button button-ghost" href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">
+            <i data-lucide="code-2"></i>
+            查看源码
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-shell footer-inner">
+      <a class="brand" href="#top">
+        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <span>Markdown Writing</span>
+      </a>
+      <p>本地优先的 Markdown 桌面写作工具。</p>
+      <span id="copyright-year"></span>
+    </div>
+  </footer>
+
+  <script src="./vendor/lucide.min.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>

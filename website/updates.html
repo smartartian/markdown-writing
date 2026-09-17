@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Markdown Writing 更新记录，同步 GitHub Releases 的最新版本、发布时间和更新说明。">
+  <title>更新记录 - Markdown Writing</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="updates-page">
+  <header class="site-header scrolled" id="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="./index.html#top" aria-label="Markdown Writing 首页">
+        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <span>Markdown Writing</span>
+      </a>
+      <nav class="desktop-nav" aria-label="主导航">
+        <a href="./index.html#features">功能</a>
+        <a href="./index.html#workflow">工作流</a>
+        <a href="./index.html#export">导出</a>
+        <a class="active" href="./updates.html">更新记录</a>
+        <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="button button-small button-dark" href="./index.html#download">
+          <i data-lucide="download"></i>
+          下载
+        </a>
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-expanded="false">
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
+      <a href="./index.html#features">功能</a>
+      <a href="./index.html#workflow">工作流</a>
+      <a href="./index.html#export">导出</a>
+      <a href="./updates.html">更新记录</a>
+      <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="./index.html#download">下载桌面版</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="updates-hero">
+      <div class="section-shell updates-hero-inner">
+        <div>
+          <span class="eyebrow">GitHub Releases</span>
+          <h1>更新记录</h1>
+          <p>这里展示 Markdown Writing 在 GitHub 发布的版本、时间和更新说明。数据直接来自仓库 Releases，官网不会维护另一份版本列表。</p>
+        </div>
+        <div class="updates-actions">
+          <a class="button button-dark" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+            <i data-lucide="external-link"></i>
+            在 GitHub 查看
+          </a>
+          <button class="button button-light" id="refresh-updates" type="button">
+            <i data-lucide="refresh-cw"></i>
+            重新同步
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell updates-content">
+      <div class="updates-toolbar">
+        <div>
+          <span class="updates-source">数据源</span>
+          <a href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">smartartian/Markdown-writing</a>
+        </div>
+        <span id="updates-synced">等待同步</span>
+      </div>
+
+      <div class="updates-status" id="updates-status" role="status" aria-live="polite">
+        <span class="updates-spinner"></span>
+        正在从 GitHub 获取更新记录...
+      </div>
+      <div class="release-list" id="release-list"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-shell footer-inner">
+      <a class="brand" href="./index.html#top">
+        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <span>Markdown Writing</span>
+      </a>
+      <p>本地优先的 Markdown 桌面写作工具。</p>
+      <span id="copyright-year"></span>
+    </div>
+  </footer>
+
+  <script src="./vendor/lucide.min.js"></script>
+  <script src="./updates.js"></script>
+</body>
+</html>

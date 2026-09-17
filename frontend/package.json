@@ -1,0 +1,21 @@
+{
+  "name": "frontend",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test src/editor-core/tests/*.test.js",
+    "bench:editor": "node --expose-gc scripts/bench-editor.mjs"
+  },
+  "devDependencies": {
+    "vite": "^3.0.7"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "lucide": "^1.25.0",
+    "marked": "^18.0.6"
+  }
+}
