@@ -26,9 +26,17 @@ export function DBUpdateDocument(arg1:number,arg2:string,arg3:string,arg4:number
 
 export function DeleteDocument(arg1:string):Promise<void>;
 
+export function DeleteUserPlugin(arg1:string):Promise<void>;
+
+export function DeleteUserTheme(arg1:string):Promise<void>;
+
 export function GetAppState():Promise<main.AppState>;
 
 export function GetAppVersion():Promise<string>;
+
+export function GetThemesDirectory():Promise<string>;
+
+export function GetUserPluginsDirectory():Promise<string>;
 
 export function ListDocumentTree(arg1:string):Promise<Array<main.Document>>;
 
@@ -39,6 +47,10 @@ export function ListFileVersions(arg1:string,arg2:number):Promise<Array<main.Fil
 export function ListRecentFiles(arg1:number):Promise<Array<main.Document>>;
 
 export function ListRecycleBin(arg1:number):Promise<Array<main.RecycleItem>>;
+
+export function ListUserPlugins():Promise<Record<string, string>>;
+
+export function ListUserThemes():Promise<Record<string, string>>;
 
 export function LoadAppSettings():Promise<Record<string, string>>;
 
@@ -56,17 +68,27 @@ export function ReadDocument(arg1:string):Promise<string>;
 
 export function ReadDocumentWithMeta(arg1:string):Promise<main.FileDocument>;
 
+export function ReadImageAsset(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function RenameDocument(arg1:string,arg2:string):Promise<main.Document>;
 
 export function RestoreFileVersion(arg1:string,arg2:number,arg3:number,arg4:string):Promise<number>;
 
 export function RestoreRecycleItem(arg1:number):Promise<void>;
 
+export function RevealThemesDirectory():Promise<void>;
+
+export function RevealUserPluginsDirectory():Promise<void>;
+
 export function SaveAppSetting(arg1:string,arg2:string):Promise<void>;
 
 export function SaveDocumentAs(arg1:string):Promise<main.Document>;
 
 export function SaveRecoveryState(arg1:string):Promise<void>;
+
+export function SaveUserPlugin(arg1:string,arg2:string):Promise<void>;
+
+export function SaveUserTheme(arg1:string,arg2:string):Promise<void>;
 
 export function SelectDocumentDir():Promise<string>;
 
@@ -75,3 +97,5 @@ export function SetPendingChanges(arg1:number,arg2:string):Promise<void>;
 export function WriteDocument(arg1:string,arg2:string):Promise<void>;
 
 export function WriteDocumentVersioned(arg1:string,arg2:string,arg3:number,arg4:string):Promise<number>;
+
+export function WriteImageAsset(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;

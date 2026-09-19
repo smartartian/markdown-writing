@@ -4,21 +4,40 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Markdown Writing 更新记录，同步 GitHub Releases 的最新版本、发布时间和更新说明。">
+  <meta name="theme-color" content="#f5f2ec">
+  <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/updates.html">
+  <link rel="icon" type="image/png" href="./assets/logo-64.png">
+  <link rel="apple-touch-icon" href="./assets/logo-128.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Markdown Writing">
+  <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/updates.html">
+  <meta property="og:title" content="更新记录 - Markdown Writing">
+  <meta property="og:description" content="同步 GitHub Releases 的最新版本、发布时间和更新说明。">
+  <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="更新记录 - Markdown Writing">
+  <meta name="twitter:description" content="同步 GitHub Releases 的最新版本、发布时间和更新说明。">
+  <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <title>更新记录 - Markdown Writing</title>
-  <link rel="stylesheet" href="./styles.css">
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="./styles.css?v=20260918-6">
 </head>
 <body class="updates-page">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
   <header class="site-header scrolled" id="site-header">
     <div class="nav-shell">
       <a class="brand" href="./index.html#top" aria-label="Markdown Writing 首页">
-        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
         <span>Markdown Writing</span>
       </a>
       <nav class="desktop-nav" aria-label="主导航">
         <a href="./index.html#features">功能</a>
         <a href="./index.html#workflow">工作流</a>
+        <a href="./index.html#security">数据安全</a>
         <a href="./index.html#export">导出</a>
-        <a class="active" href="./updates.html">更新记录</a>
+        <a class="active" href="./updates.html" aria-current="page">更新记录</a>
         <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
       <div class="nav-actions">
@@ -26,7 +45,7 @@
           <i data-lucide="download"></i>
           下载
         </a>
-        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-expanded="false">
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
           <i data-lucide="menu"></i>
         </button>
       </div>
@@ -34,6 +53,7 @@
     <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
       <a href="./index.html#features">功能</a>
       <a href="./index.html#workflow">工作流</a>
+      <a href="./index.html#security">数据安全</a>
       <a href="./index.html#export">导出</a>
       <a href="./updates.html">更新记录</a>
       <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
@@ -41,7 +61,7 @@
     </nav>
   </header>
 
-  <main>
+  <main id="main-content">
     <section class="updates-hero">
       <div class="section-shell updates-hero-inner">
         <div>
@@ -82,7 +102,7 @@
   <footer class="site-footer">
     <div class="section-shell footer-inner">
       <a class="brand" href="./index.html#top">
-        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
         <span>Markdown Writing</span>
       </a>
       <p>本地优先的 Markdown 桌面写作工具。</p>
@@ -90,7 +110,7 @@
     </div>
   </footer>
 
-  <script src="./vendor/lucide.min.js"></script>
-  <script src="./updates.js"></script>
+  <script src="./vendor/lucide.min.js?v=20260918-6"></script>
+  <script type="module" src="./updates.js?v=20260918-6"></script>
 </body>
 </html>

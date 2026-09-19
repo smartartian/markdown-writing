@@ -17,6 +17,24 @@ Expected result:
 - `data-composition-committed` appears only after `compositionend`.
 - Model revision increments once per committed composition.
 
+## Settings
+
+- [ ] Open Settings from the editor sidebar.
+- [ ] Switch between System Settings and Shortcuts several times.
+- [ ] Change theme, editor font, font size, line height, content width, and reduced motion.
+- [ ] Close and reopen Settings, then restart the app.
+- [ ] Record a shortcut, cancel with Escape, then record and restore the original value.
+- [ ] Trigger Check for Updates after switching categories.
+- [ ] Select a document directory from Settings.
+
+Expected result:
+
+- Appearance values apply immediately and persist after restart.
+- Font size, line height, and content width visibly affect both rendered and source modes.
+- Check for Updates remains functional after switching settings categories.
+- Shortcut recording does not accidentally close the settings page.
+- Directory selection persists in the last application state.
+
 ## Undo and Redo
 
 - [ ] Type several characters, then press `Cmd/Ctrl + Z`.

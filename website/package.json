@@ -1,0 +1,9 @@
+{
+  "name": "markdown-writing-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check main.js && node --check updates.js && node --check docs.js && node --check site.js && node --check releases-client.js",
+    "test": "node --test tests/*.test.js"
+  }
+}

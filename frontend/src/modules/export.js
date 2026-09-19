@@ -1,5 +1,3 @@
-import { marked } from 'marked';
-
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -9,7 +7,7 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-export function createExportModule({ getCurrentMd, getExportName, sanitizeHtml, escapeHtml }) {
+export function createExportModule({ getCurrentMd, getExportName, renderMarkdown, escapeHtml }) {
   function exportAsMd() {
     const blob = new Blob([getCurrentMd()], { type: 'text/markdown;charset=utf-8' });
     downloadBlob(blob, getExportName('md'));
@@ -35,7 +33,7 @@ export function createExportModule({ getCurrentMd, getExportName, sanitizeHtml, 
   }
 
   async function exportAsPng() {
-    const html = sanitizeHtml(marked.parse(getCurrentMd()));
+    const html = renderMarkdown(getCurrentMd());
     const container = document.createElement('div');
     container.innerHTML = html;
     container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:48px;background:#fff;color:#2c2e33;font-family:Georgia,serif;font-size:16px;line-height:1.8;';
@@ -73,7 +71,7 @@ export function createExportModule({ getCurrentMd, getExportName, sanitizeHtml, 
   }
 
   function exportAsPdf() {
-    const html = sanitizeHtml(marked.parse(getCurrentMd()));
+    const html = renderMarkdown(getCurrentMd());
     const name = getExportName('pdf');
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -104,7 +102,7 @@ export function createExportModule({ getCurrentMd, getExportName, sanitizeHtml, 
   }
 
   function exportAsWordDocument() {
-    const html = sanitizeHtml(marked.parse(getCurrentMd()));
+    const html = renderMarkdown(getCurrentMd());
     const name = getExportName('doc');
     const docHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"

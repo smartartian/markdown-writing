@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,122 @@ func TestAtomicWriteFile(t *testing.T) {
 	}
 }
 
+func TestWriteImageAsset(t *testing.T) {
+	root := t.TempDir()
+	documentPath := filepath.Join(root, "notes", "note.md")
+	if err := os.MkdirAll(filepath.Dir(documentPath), 0755); err != nil {
+		t.Fatalf("create document dir: %v", err)
+	}
+	if err := os.WriteFile(documentPath, []byte("# note"), 0644); err != nil {
+		t.Fatalf("write document: %v", err)
+	}
+
+	app := &App{allowed: make(map[string]struct{})}
+	app.setDocumentRoot(root)
+	payload := base64.StdEncoding.EncodeToString([]byte("image-bytes"))
+
+	first, err := app.WriteImageAsset(documentPath, "assets", "cover.png", payload)
+	if err != nil {
+		t.Fatalf("WriteImageAsset first: %v", err)
+	}
+	if first != "./assets/cover.png" {
+		t.Fatalf("first relative path = %q; want %q", first, "./assets/cover.png")
+	}
+	if _, err := os.Stat(filepath.Join(root, "notes", "assets", "cover.png")); err != nil {
+		t.Fatalf("image was not written beside document: %v", err)
+	}
+
+	second, err := app.WriteImageAsset(documentPath, "assets", "cover.png", payload)
+	if err != nil {
+		t.Fatalf("WriteImageAsset second: %v", err)
+	}
+	if second != "./assets/cover-1.png" {
+		t.Fatalf("second relative path = %q; want %q", second, "./assets/cover-1.png")
+	}
+
+	if _, err := app.WriteImageAsset(documentPath, "../outside", "cover.png", payload); err == nil {
+		t.Fatal("expected traversal image directory to fail")
+	}
+	if _, err := app.WriteImageAsset(documentPath, "assets", "cover.txt", payload); err == nil {
+		t.Fatal("expected unsupported image extension to fail")
+	}
+	if _, err := app.WriteImageAsset(documentPath, "assets", "cover.png", "not-base64"); err == nil {
+		t.Fatal("expected invalid base64 to fail")
+	}
+	if _, err := app.WriteImageAsset(documentPath, "assets", "cover.png", ""); err == nil {
+		t.Fatal("expected empty image to fail")
+	}
+	oversized := strings.Repeat("A", ((20*1024*1024+3)/3)*4)
+	if _, err := app.WriteImageAsset(documentPath, "assets", "large.png", oversized); err == nil {
+		t.Fatal("expected oversized image to fail")
+	}
+}
+
+func TestReadImageAsset(t *testing.T) {
+	root := t.TempDir()
+	documentPath := filepath.Join(root, "notes", "note.md")
+	assetPath := filepath.Join(root, "notes", "assets", "logo.png")
+	directImagePath := filepath.Join(root, "notes", "direct.png")
+	customImagePath := filepath.Join(root, "notes", "media", "figures", "custom.png")
+	if err := os.MkdirAll(filepath.Dir(assetPath), 0755); err != nil {
+		t.Fatalf("create asset dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(customImagePath), 0755); err != nil {
+		t.Fatalf("create custom asset dir: %v", err)
+	}
+	if err := os.WriteFile(documentPath, []byte("# note"), 0644); err != nil {
+		t.Fatalf("write document: %v", err)
+	}
+	imageBytes := []byte("image-bytes")
+	if err := os.WriteFile(assetPath, imageBytes, 0644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+	if err := os.WriteFile(directImagePath, imageBytes, 0644); err != nil {
+		t.Fatalf("write direct image: %v", err)
+	}
+	if err := os.WriteFile(customImagePath, imageBytes, 0644); err != nil {
+		t.Fatalf("write custom image: %v", err)
+	}
+
+	app := &App{allowed: make(map[string]struct{})}
+	app.setDocumentRoot(root)
+	expected := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageBytes)
+
+	for _, source := range []string{"./assets/logo.png", "assets/logo.png", "logo.png"} {
+		got, err := app.ReadImageAsset(documentPath, "assets", source)
+		if err != nil {
+			t.Fatalf("ReadImageAsset(%q): %v", source, err)
+		}
+		if got != expected {
+			t.Fatalf("ReadImageAsset(%q) = %q; want %q", source, got, expected)
+		}
+	}
+
+	for _, testCase := range []struct {
+		imageDir string
+		source   string
+	}{
+		{imageDir: "assets", source: "direct.png"},
+		{imageDir: "media/figures", source: "custom.png"},
+		{imageDir: "assets", source: assetPath},
+	} {
+		got, err := app.ReadImageAsset(documentPath, testCase.imageDir, testCase.source)
+		if err != nil {
+			t.Fatalf("ReadImageAsset(%q, %q): %v", testCase.imageDir, testCase.source, err)
+		}
+		if got != expected {
+			t.Fatalf("ReadImageAsset(%q, %q) = %q; want %q", testCase.imageDir, testCase.source, got, expected)
+		}
+	}
+
+	if _, err := app.ReadImageAsset(documentPath, "assets", "../../outside.png"); err == nil {
+		t.Fatal("expected image path outside document root to fail")
+	}
+	if _, err := app.ReadImageAsset(documentPath, "../outside", "logo.png"); err == nil {
+		t.Fatal("expected traversal image directory to fail")
+	}
+}
+
 func TestBeforeCloseGuard(t *testing.T) {
 	app := &App{}
 	app.SetPendingChanges(1, "note.md")
@@ -123,5 +240,87 @@ func TestRecoveryState(t *testing.T) {
 	}
 	if loaded != "" {
 		t.Fatalf("recovery payload after clear = %q; want empty", loaded)
+	}
+}
+
+func TestUserThemes(t *testing.T) {
+	app := &App{configDir: t.TempDir()}
+	dir, err := app.GetThemesDirectory()
+	if err != nil {
+		t.Fatalf("GetThemesDirectory: %v", err)
+	}
+	if !strings.HasSuffix(dir, filepath.Join("", "themes")) {
+		t.Fatalf("theme directory = %q; want themes suffix", dir)
+	}
+
+	content := `{"schemaVersion":1,"id":"custom-theme","name":"Custom","variants":{"light":{"tokens":{"bgPage":"#ffffff"}}}}`
+	if err := app.SaveUserTheme("custom-theme", content); err != nil {
+		t.Fatalf("SaveUserTheme: %v", err)
+	}
+	themes, err := app.ListUserThemes()
+	if err != nil {
+		t.Fatalf("ListUserThemes: %v", err)
+	}
+	if themes["custom-theme"] != content {
+		t.Fatalf("saved theme content = %q; want %q", themes["custom-theme"], content)
+	}
+
+	if err := app.SaveUserTheme("../escape", content); err == nil {
+		t.Fatal("expected unsafe theme id to fail")
+	}
+	if err := app.SaveUserTheme("invalid-json", "not-json"); err == nil {
+		t.Fatal("expected invalid JSON to fail")
+	}
+
+	if err := app.DeleteUserTheme("custom-theme"); err != nil {
+		t.Fatalf("DeleteUserTheme: %v", err)
+	}
+	themes, err = app.ListUserThemes()
+	if err != nil {
+		t.Fatalf("ListUserThemes after delete: %v", err)
+	}
+	if _, exists := themes["custom-theme"]; exists {
+		t.Fatal("expected theme to be deleted")
+	}
+}
+
+func TestUserPlugins(t *testing.T) {
+	app := &App{configDir: t.TempDir()}
+	dir, err := app.GetUserPluginsDirectory()
+	if err != nil {
+		t.Fatalf("GetUserPluginsDirectory: %v", err)
+	}
+	if !strings.HasSuffix(dir, filepath.Join("", "plugins")) {
+		t.Fatalf("plugin directory = %q; want plugins suffix", dir)
+	}
+
+	content := `{"schemaVersion":1,"id":"custom-plugin","name":"Custom Plugin","version":"1.0.0","entry":"ctx => {}"}`
+	if err := app.SaveUserPlugin("custom-plugin", content); err != nil {
+		t.Fatalf("SaveUserPlugin: %v", err)
+	}
+	plugins, err := app.ListUserPlugins()
+	if err != nil {
+		t.Fatalf("ListUserPlugins: %v", err)
+	}
+	if plugins["custom-plugin"] != content {
+		t.Fatalf("saved plugin content = %q; want %q", plugins["custom-plugin"], content)
+	}
+
+	if err := app.SaveUserPlugin("../escape", content); err == nil {
+		t.Fatal("expected unsafe plugin id to fail")
+	}
+	if err := app.SaveUserPlugin("invalid-json", "not-json"); err == nil {
+		t.Fatal("expected invalid plugin JSON to fail")
+	}
+
+	if err := app.DeleteUserPlugin("custom-plugin"); err != nil {
+		t.Fatalf("DeleteUserPlugin: %v", err)
+	}
+	plugins, err = app.ListUserPlugins()
+	if err != nil {
+		t.Fatalf("ListUserPlugins after delete: %v", err)
+	}
+	if _, exists := plugins["custom-plugin"]; exists {
+		t.Fatal("expected plugin to be deleted")
 	}
 }

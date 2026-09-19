@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://smartartian.github.io/Markdown-writing/sitemap.xml

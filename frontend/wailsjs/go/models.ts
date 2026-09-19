@@ -1,13 +1,13 @@
 export namespace main {
-
+	
 	export class AppState {
 	    documentDir: string;
 	    openDocs: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.documentDir = source["documentDir"];
@@ -22,11 +22,11 @@ export namespace main {
 	    createdAt: string;
 	    updatedAt: string;
 	    revision: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DBDocument(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -45,11 +45,11 @@ export namespace main {
 	    modTime: string;
 	    isDir: boolean;
 	    children?: Document[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -59,7 +59,7 @@ export namespace main {
 	        this.isDir = source["isDir"];
 	        this.children = this.convertValues(source["children"], Document);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -86,11 +86,11 @@ export namespace main {
 	    content: string;
 	    size: number;
 	    createdAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DocumentVersion(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -108,11 +108,11 @@ export namespace main {
 	    revision: number;
 	    contentHash: string;
 	    changed: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileDocument(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -130,11 +130,11 @@ export namespace main {
 	    contentHash: string;
 	    size: number;
 	    createdAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileVersion(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -152,11 +152,11 @@ export namespace main {
 	    storedPath: string;
 	    name: string;
 	    deletedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RecycleItem(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -168,3 +168,4 @@ export namespace main {
 	}
 
 }
+

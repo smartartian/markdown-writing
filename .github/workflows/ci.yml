@@ -22,6 +22,10 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - run: npm run check
+        working-directory: website
+      - run: npm test
+        working-directory: website
 
   go:
     runs-on: ubuntu-latest

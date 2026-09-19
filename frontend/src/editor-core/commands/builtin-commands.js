@@ -54,6 +54,18 @@ export function createBuiltinCommands() {
   registry.register('toggleEmphasis', wrapSelection('*'));
   registry.register('toggleInlineCode', wrapSelection('`'));
   registry.register('toggleStrike', wrapSelection('~~'));
+  registry.register('toggleHighlight', wrapSelection('=='));
+
+  registry.register('insertLink', ({ session }) => {
+    const range = selectionRange(session);
+    if (!range) return null;
+    const selected = range.block.raw.slice(range.start, range.end);
+    const label = selected || '链接文本';
+    const replacement = `[${label}](url)`;
+    const raw = range.block.raw.slice(0, range.start) + replacement + range.block.raw.slice(range.end);
+    const urlOffset = range.start + 1 + label.length + 2;
+    return applyReplace(session, range.block.id, raw, urlOffset, { source: 'command' });
+  });
 
   registry.register('toggleHeading', ({ session }) => {
     const range = selectionRange(session);
@@ -69,6 +81,40 @@ export function createBuiltinCommands() {
     return applyReplace(session, range.block.id, raw, lineStart + nextLine.length, {
       source: 'command',
     });
+  });
+
+  registry.register('setHeading', ({ session, level = 1 }) => {
+    const range = selectionRange(session);
+    if (!range) return null;
+    const normalizedLevel = Math.max(0, Math.min(6, Number(level) || 0));
+    const content = range.block.raw.replace(/^#{1,6}\s+/, '');
+    const raw = normalizedLevel > 0
+      ? `${'#'.repeat(normalizedLevel)} ${content}`
+      : content;
+    return applyReplace(session, range.block.id, raw, raw.length, { source: 'command' });
+  });
+
+  registry.register('toggleCodeBlock', ({ session }) => {
+    const range = selectionRange(session);
+    if (!range) return null;
+    const raw = /^```[\s\S]*```\s*$/.test(range.block.raw.trim())
+      ? range.block.raw.replace(/^```[^\n]*\n?/, '').replace(/\n?```\s*$/, '')
+      : `\`\`\`\n${range.block.raw}\n\`\`\``;
+    return applyReplace(session, range.block.id, raw, raw.length, { source: 'command' });
+  });
+
+  registry.register('toggleQuote', ({ session }) => toggleLinePrefix(session, /^>\s?/, '> '));
+  registry.register('toggleUnorderedList', ({ session }) => toggleLinePrefix(session, /^(?:[-*+]|\d+[.)])\s+/, '- '));
+  registry.register('toggleOrderedList', ({ session }) => toggleLinePrefix(session, /^(?:[-*+]|\d+[.)])\s+/, '1. '));
+  registry.register('toggleTaskList', ({ session }) => toggleLinePrefix(session, /^[-*+]\s+\[[ xX]\]\s+/, '- [ ] '));
+
+  registry.register('insertMdx', ({ session }) => {
+    const selection = session.selection;
+    const block = selection ? session.document.getBlock(selection.anchor.blockId) : null;
+    if (!block) return null;
+    const snippet = '<Component />';
+    const raw = block.raw ? `${block.raw}\n\n${snippet}` : snippet;
+    return applyReplace(session, block.id, raw, raw.length, { source: 'command' });
   });
 
   registry.register('insertTable', ({ session }) => {
@@ -106,10 +152,19 @@ export function createBuiltinCommands() {
   registry.register('moveBlockUp', ({ session }) => moveBlock(session, -1));
   registry.register('moveBlockDown', ({ session }) => moveBlock(session, 1));
 
-  registry.register('indentList', ({ session }) => indentBlock(session, true));
-  registry.register('outdentList', ({ session }) => indentBlock(session, false));
+  registry.register('indentList', ({ session, size = 4 }) => indentBlock(session, true, size));
+  registry.register('outdentList', ({ session, size = 4 }) => indentBlock(session, false, size));
 
   return registry;
+}
+
+function toggleLinePrefix(session, pattern, prefix) {
+  const range = selectionRange(session);
+  if (!range) return null;
+  const raw = pattern.test(range.block.raw)
+    ? range.block.raw.replace(pattern, '')
+    : prefix + range.block.raw;
+  return applyReplace(session, range.block.id, raw, raw.length, { source: 'command' });
 }
 
 function moveBlock(session, direction) {
@@ -127,13 +182,14 @@ function moveBlock(session, direction) {
   return session.apply(transaction);
 }
 
-function indentBlock(session, indent) {
+function indentBlock(session, indent, size = 4) {
   const selection = session.selection;
   if (!selection) return null;
   const block = session.document.getBlock(selection.anchor.blockId);
   if (!block || !/^(\s*)([-*+]|\d+[.)])\s/.test(block.raw)) return null;
+  const indentSize = Math.max(1, Number(size) || 4);
   const raw = indent
-    ? block.raw.split('\n').map(line => line ? `    ${line}` : line).join('\n')
-    : block.raw.split('\n').map(line => line.replace(/^ {1,4}/, '')).join('\n');
+    ? block.raw.split('\n').map(line => line ? `${' '.repeat(indentSize)}${line}` : line).join('\n')
+    : block.raw.split('\n').map(line => line.replace(new RegExp(`^ {1,${indentSize}}`), '')).join('\n');
   return applyReplace(session, block.id, raw, raw.length, { source: 'command' });
 }

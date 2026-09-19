@@ -9,6 +9,7 @@ export function createSafetyModule({
   onSaveCopy,
   onContentRestored,
   onWorkspaceChanged,
+  getWatcherInterval = () => 3000,
 }) {
   let watcherTimer = null;
   let modalElement = null;
@@ -63,14 +64,14 @@ export function createSafetyModule({
   }
 
   function stopFileWatcher() {
-    if (watcherTimer) clearInterval(watcherTimer);
+    if (watcherTimer) clearTimeout(watcherTimer);
     watcherTimer = null;
   }
 
   function startFileWatcher(path) {
     stopFileWatcher();
-    if (!path || state.isDBMode) return;
-    watcherTimer = setInterval(async () => {
+    if (!path) return;
+    const check = async () => {
       if (!state.currentDoc?.path || state.currentDoc.path !== path) return;
       if (Date.now() < state.ignoreWatcherUntil) return;
       try {
@@ -85,7 +86,14 @@ export function createSafetyModule({
       } catch (error) {
         showExternalChangeDialog({ path, missing: true, error });
       }
-    }, 3000);
+    };
+    const loop = async () => {
+      await check();
+      if (state.currentDoc?.path === path) {
+        watcherTimer = setTimeout(loop, Math.max(500, Number(getWatcherInterval()) || 3000));
+      }
+    };
+    watcherTimer = setTimeout(loop, Math.max(500, Number(getWatcherInterval()) || 3000));
   }
 
   function showExternalChangeDialog(meta) {
@@ -131,7 +139,6 @@ export function createSafetyModule({
       contentHash: state.currentHash,
       modelVersion: state.editorSession?.document?.version || 0,
       transactionID: state.editorSession?.lastTransactionId || 0,
-      isDBMode: state.isDBMode,
       savedAt: new Date().toISOString(),
     });
     try {
@@ -201,9 +208,7 @@ export function createSafetyModule({
     const doc = state.currentDoc;
     if (!doc) return;
     let versions = [];
-    if (state.isDBMode && doc.id) {
-      versions = await storage.listDbDocumentVersions(doc.id, 50);
-    } else if (doc.path) {
+    if (doc.path) {
       versions = await storage.listFileVersions(doc.path, 50);
     }
     const body = versions.length
@@ -233,19 +238,18 @@ export function createSafetyModule({
         try {
           let revision;
           let contentHash = state.currentHash;
-          if (state.isDBMode && doc.id) {
-            revision = await storage.restoreDbDocumentVersion(doc.id, versionID, state.currentRevision);
-          } else {
+          if (doc.path) {
             revision = await storage.restoreFileVersion(doc.path, versionID, state.currentRevision, state.currentHash);
             const meta = await storage.readDocumentWithMeta(doc.path);
             contentHash = meta?.contentHash || contentHash;
+          } else {
+            throw new Error('当前文档尚未保存到本地文件');
           }
           await onContentRestored({
             currentDoc: doc,
             content: version.content,
             revision,
             contentHash,
-            isDBMode: state.isDBMode,
           });
           closeModal();
         } catch (error) {
@@ -297,6 +301,80 @@ export function createSafetyModule({
     });
   }
 
+  async function openRecycleBinPanel(container, { onClose = null } = {}) {
+    if (!container) return;
+
+    const render = async () => {
+      const items = await storage.listRecycleBin(100);
+      const body = items.length
+        ? `<div class="version-list recycle-panel-list">${items.map(item => `
+            <article class="version-item">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${escapeHtml(item.deletedAt || '')}</span>
+                <p>${escapeHtml(item.originalPath)}</p>
+              </div>
+              <div class="recycle-actions">
+                <button class="btn-secondary recycle-panel-restore" data-id="${item.id}" type="button">恢复</button>
+                <button class="btn-secondary recycle-panel-purge" data-id="${item.id}" type="button">永久删除</button>
+              </div>
+            </article>
+          `).join('')}</div>`
+        : `
+          <div class="embedded-empty-state">
+            <i data-lucide="trash-2"></i>
+            <strong>回收站为空</strong>
+            <span>删除的文档会先进入这里。</span>
+          </div>
+        `;
+
+      container.innerHTML = `
+        <div class="embedded-view recycle-view" id="recycle-view">
+          <header class="embedded-view-header">
+            <div>
+              <span class="app-panel-kicker">RECYCLE BIN</span>
+              <h1>回收站</h1>
+              <p>删除的文档会先保留在这里，确认后再永久清理。</p>
+            </div>
+            <button class="embedded-view-close" type="button" data-recycle-close aria-label="关闭回收站">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <div class="embedded-view-body">${body}</div>
+        </div>
+      `;
+      lucideIcons();
+
+      container.querySelector('[data-recycle-close]')?.addEventListener('click', () => onClose?.());
+      container.querySelectorAll('.recycle-panel-restore').forEach(button => {
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            await storage.restoreRecycleItem(Number(button.dataset.id));
+            await onWorkspaceChanged();
+            return;
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+      container.querySelectorAll('.recycle-panel-purge').forEach(button => {
+        button.addEventListener('click', async () => {
+          if (!confirm('永久删除后无法恢复，确定继续吗？')) return;
+          button.disabled = true;
+          try {
+            await storage.purgeRecycleItem(Number(button.dataset.id));
+            await render();
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    };
+
+    await render();
+  }
+
   return {
     startFileWatcher,
     stopFileWatcher,
@@ -305,6 +383,7 @@ export function createSafetyModule({
     offerCrashRecovery,
     openHistory,
     openRecycleBin,
+    openRecycleBinPanel,
     showExternalChangeDialog,
   };
 }

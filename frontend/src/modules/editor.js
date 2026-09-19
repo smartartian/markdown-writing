@@ -92,7 +92,7 @@ export function parseMarkdownBlocksWithFallback(marked, markdown, primaryParser 
 
 export function createEditorCore({
   marked,
-  sanitizeHtml,
+  renderMarkdown,
   escapeHtml,
   getActiveBlockIndex,
   setActiveBlockIndex,
@@ -102,6 +102,9 @@ export function createEditorCore({
     value => parseMarkdownBlocksWithCore(value, previousBlocks),
   ),
 }) {
+  if (typeof renderMarkdown !== 'function') {
+    throw new TypeError('createEditorCore requires renderMarkdown');
+  }
   let lastParseResult = null;
 
   function parseMarkdownBlocks(md) {
@@ -119,7 +122,7 @@ export function createEditorCore({
       return block.type === 'paragraph' ? '<p><br></p>' : '';
     }
     if (block.type === 'hr') return '<hr>';
-    return sanitizeHtml(marked.parse(block.raw, { breaks: true, gfm: true }));
+    return renderMarkdown(block.raw);
   }
 
   function buildBlockEditorHtml(md) {

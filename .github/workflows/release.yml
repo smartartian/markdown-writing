@@ -4,9 +4,17 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,9 +32,92 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - run: npm run check
+        working-directory: website
+      - run: npm test
+        working-directory: website
       - run: go test ./...
       - run: go vet ./...
-      - name: Require release checksum
-        run: test -n "$MD_EDITOR_DMG_SHA256"
+
+  package-macos:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+      - run: npm ci
+        working-directory: frontend
+      - name: Build macOS application
+        run: "$(go env GOPATH)/bin/wails build -clean -platform darwin/arm64"
+      - name: Package DMG and checksum
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_NAME="Markdown Writing-${VERSION}-macos-arm64.dmg"
+          hdiutil create -volname "Markdown Writing" \
+            -srcfolder "build/bin/Markdown Writing.app" \
+            -ov -format UDZO "build/bin/${DMG_NAME}"
+          shasum -a 256 "build/bin/${DMG_NAME}" > "build/bin/${DMG_NAME}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: markdown-writing-macos
+          path: |
+            build/bin/*.dmg
+            build/bin/*.dmg.sha256
+      - name: Publish GitHub Release
         env:
-          MD_EDITOR_DMG_SHA256: ${{ secrets.MD_EDITOR_DMG_SHA256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_NAME="Markdown Writing-${VERSION}-macos-arm64.dmg"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              "build/bin/${DMG_NAME}" \
+              "build/bin/${DMG_NAME}.sha256" \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              "build/bin/${DMG_NAME}" \
+              "build/bin/${DMG_NAME}.sha256" \
+              --title "Markdown Writing ${VERSION}" \
+              --notes-file CHANGELOG.md
+          fi
+
+  sync-website-releases:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Generate website release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" \
+            --jq '[.[] | select(.draft == false) | {tag_name, name, html_url, published_at, prerelease, body, assets: [.assets[] | {name, browser_download_url, size}]}]' \
+            > website/releases.json
+      - name: Commit release manifest
+        run: |
+          if git diff --quiet -- website/releases.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website/releases.json
+          git commit -m "chore: sync website release manifest"
+          git push

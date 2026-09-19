@@ -1,38 +1,14 @@
-const REPO = 'smartartian/Markdown-writing';
-const RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=12`;
-const CACHE_KEY = `markdown-writing-releases:${REPO}`;
-const CACHE_TTL = 10 * 60 * 1000;
+import {
+  REPO,
+  formatReleaseDate,
+  getReleases,
+} from './releases-client.js';
+import { initSiteShell, renderIcons } from './site.js';
 
-const header = document.querySelector('#site-header');
-const mobileMenuButton = document.querySelector('#mobile-menu-button');
-const mobileNav = document.querySelector('#mobile-nav');
 const releaseList = document.querySelector('#release-list');
 const statusElement = document.querySelector('#updates-status');
 const syncedElement = document.querySelector('#updates-synced');
 const refreshButton = document.querySelector('#refresh-updates');
-
-function renderIcons() {
-  const lucideApi = window.lucide || globalThis.lucide;
-  if (lucideApi) lucideApi.createIcons();
-}
-
-function updateHeader() {
-  header?.classList.toggle('scrolled', window.scrollY > 18);
-}
-
-mobileMenuButton?.addEventListener('click', () => {
-  const open = mobileMenuButton.getAttribute('aria-expanded') === 'true';
-  mobileMenuButton.setAttribute('aria-expanded', String(!open));
-  mobileNav?.classList.toggle('open', !open);
-  document.body.classList.toggle('menu-open', !open);
-});
-
-mobileNav?.addEventListener('click', event => {
-  if (!event.target.closest('a')) return;
-  mobileMenuButton?.setAttribute('aria-expanded', 'false');
-  mobileNav.classList.remove('open');
-  document.body.classList.remove('menu-open');
-});
 
 function escapeHtml(value) {
   return String(value || '')
@@ -103,15 +79,6 @@ function renderReleaseNotes(markdown) {
   return html.join('');
 }
 
-function formatDate(value) {
-  if (!value) return '未标注日期';
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(value));
-}
-
 function releaseType(release) {
   if (release.prerelease) return { className: 'preview', label: '预览版' };
   if (release.draft) return { className: 'draft', label: '草稿' };
@@ -150,10 +117,10 @@ function renderReleases(releases) {
             </div>
             <div class="release-meta">
               <span><i data-lucide="tag"></i>${escapeHtml(release.tag_name || '')}</span>
-              <span><i data-lucide="calendar-days"></i>${escapeHtml(formatDate(release.published_at))}</span>
+              <span><i data-lucide="calendar-days"></i>${escapeHtml(formatReleaseDate(release.published_at))}</span>
             </div>
           </div>
-          <a class="release-link" href="${escapeHtml(release.html_url)}" target="_blank" rel="noreferrer">
+          <a class="release-link" href="${escapeHtml(safeUrl(release.html_url) || `https://github.com/${REPO}/releases`)}" target="_blank" rel="noreferrer">
             在 GitHub 查看
             <i data-lucide="arrow-up-right"></i>
           </a>
@@ -163,24 +130,6 @@ function renderReleases(releases) {
     `;
   }).join('');
   renderIcons();
-}
-
-function readCache() {
-  try {
-    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
-    if (!cached || Date.now() - cached.savedAt > CACHE_TTL) return null;
-    return cached.releases;
-  } catch (error) {
-    return null;
-  }
-}
-
-function writeCache(releases) {
-  try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), releases }));
-  } catch (error) {
-    // Cache failures should not block the page.
-  }
 }
 
 function showError(error) {
@@ -201,43 +150,14 @@ function showError(error) {
   document.querySelector('#retry-updates')?.addEventListener('click', () => loadReleases({ force: true }));
 }
 
-async function fetchReleases() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-  try {
-    const response = await fetch(RELEASES_API, {
-      headers: { Accept: 'application/vnd.github+json' },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`GitHub 返回 ${response.status}`);
-    }
-    const releases = await response.json();
-    return releases.filter(release => !release.draft);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function loadReleases({ force = false } = {}) {
   refreshButton.disabled = true;
   statusElement.hidden = false;
   releaseList.innerHTML = '';
   statusElement.innerHTML = '<span class="updates-spinner"></span>正在从 GitHub 获取更新记录...';
 
-  if (!force) {
-    const cached = readCache();
-    if (cached) {
-      syncedElement.textContent = '已使用最近一次同步结果';
-      renderReleases(cached);
-      refreshButton.disabled = false;
-      return;
-    }
-  }
-
   try {
-    const releases = await fetchReleases();
-    writeCache(releases);
+    const releases = await getReleases({ force });
     syncedElement.textContent = `最近同步：${new Intl.DateTimeFormat('zh-CN', {
       hour: '2-digit',
       minute: '2-digit',
@@ -250,11 +170,7 @@ async function loadReleases({ force = false } = {}) {
   }
 }
 
-const yearElement = document.querySelector('#copyright-year');
-if (yearElement) yearElement.textContent = `© ${new Date().getFullYear()}`;
-
 refreshButton?.addEventListener('click', () => loadReleases({ force: true }));
-window.addEventListener('scroll', updateHeader, { passive: true });
-updateHeader();
+initSiteShell({ solidHeader: true });
 renderIcons();
 loadReleases();

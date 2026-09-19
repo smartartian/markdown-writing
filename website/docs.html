@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Markdown Writing 数据安全设计：原子写入、Revision 冲突检测、版本历史、回收站和崩溃恢复。">
+  <meta name="theme-color" content="#f5f2ec">
+  <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/docs.html">
+  <link rel="icon" type="image/png" href="./assets/logo-64.png">
+  <link rel="apple-touch-icon" href="./assets/logo-128.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Markdown Writing">
+  <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/docs.html">
+  <meta property="og:title" content="数据安全设计 - Markdown Writing">
+  <meta property="og:description" content="先保证不丢，再谈功能。了解 Markdown Writing 的保存、冲突处理与恢复机制。">
+  <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="数据安全设计 - Markdown Writing">
+  <meta name="twitter:description" content="原子写入、冲突检测、版本历史、回收站和崩溃恢复。">
+  <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <title>数据安全设计 - Markdown Writing</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="./styles.css?v=20260918-6">
+</head>
+<body class="docs-page">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="site-header scrolled" id="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="./index.html#top" aria-label="Markdown Writing 首页">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
+        <span>Markdown Writing</span>
+      </a>
+      <nav class="desktop-nav" aria-label="主导航">
+        <a href="./index.html#features">功能</a>
+        <a href="./index.html#workflow">工作流</a>
+        <a class="active" href="./docs.html" aria-current="page">数据安全</a>
+        <a href="./index.html#export">导出</a>
+        <a href="./updates.html">更新记录</a>
+        <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="button button-small button-dark" href="./index.html#download">
+          <i data-lucide="download"></i>
+          下载
+        </a>
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
+      <a href="./index.html#features">功能</a>
+      <a href="./index.html#workflow">工作流</a>
+      <a href="./docs.html">数据安全</a>
+      <a href="./index.html#export">导出</a>
+      <a href="./updates.html">更新记录</a>
+      <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="./index.html#download">下载桌面版</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="docs-hero">
+      <div class="section-shell">
+        <span class="eyebrow">Data Safety</span>
+        <h1>先保证不丢，<br>再谈功能。</h1>
+        <p>Markdown Writing 把本地文件视为唯一事实来源。保存、冲突处理、历史恢复和退出保护都围绕这条原则设计，让每次写入都可解释、可验证。</p>
+      </div>
+    </section>
+
+    <div class="section-shell docs-layout">
+      <aside class="docs-sidebar" aria-label="本页目录">
+        <strong>安全设计</strong>
+        <a href="#principles">设计原则</a>
+        <a href="#save-flow">保存流程</a>
+        <a href="#conflicts">外部冲突</a>
+        <a href="#history">历史与回收站</a>
+        <a href="#recovery">退出与恢复</a>
+        <a href="#boundaries">能力边界</a>
+      </aside>
+
+      <article class="docs-content">
+        <section class="docs-section" id="principles">
+          <h2>设计原则</h2>
+          <p>编辑器的第一责任不是让界面显得智能，而是在异常、误操作和多窗口竞争发生时，尽量不让用户失去已经写下的内容。</p>
+          <ul>
+            <li><strong>本地优先：</strong>普通 Markdown 文件保留在磁盘，应用不会把文档锁进私有格式。</li>
+            <li><strong>写入可验证：</strong>每次保存都携带当前 revision 和内容哈希，版本不一致时停止覆盖。</li>
+            <li><strong>恢复优先于报错：</strong>冲突、崩溃和误删除都应提供可执行的恢复路径，而不是只有错误提示。</li>
+            <li><strong>用户保留决定权：</strong>外部修改发生时，可以重新载入、保留本地版本或另存副本。</li>
+          </ul>
+        </section>
+
+        <section class="docs-section" id="save-flow">
+          <h2>一次保存经历什么</h2>
+          <p>自动保存和手动保存共用同一条提交路径。这样不会出现“手动保存更安全、自动保存路径不同”的隐性分叉。</p>
+          <div class="docs-flow" aria-label="保存流程">
+            <div class="docs-flow-step">
+              <span>01</span>
+              <div>
+                <strong>校验当前版本</strong>
+                <p>提交时携带文档的 revision 与内容哈希，确认应用读取的版本仍是磁盘上的当前版本。</p>
+              </div>
+            </div>
+            <div class="docs-flow-step">
+              <span>02</span>
+              <div>
+                <strong>写入临时文件</strong>
+                <p>新内容先写到目标目录中的临时文件，避免原文件在写入进行到一半时被截断。</p>
+              </div>
+            </div>
+            <div class="docs-flow-step">
+              <span>03</span>
+              <div>
+                <strong>原子替换原文件</strong>
+                <p>内容写入完成后替换原文件，再做必要的清理，让读者看到的始终是完整版本。</p>
+              </div>
+            </div>
+            <div class="docs-flow-step">
+              <span>04</span>
+              <div>
+                <strong>记录版本与恢复状态</strong>
+                <p>保存成功后更新 revision、写入历史快照，并清理已经落盘的崩溃恢复内容。</p>
+              </div>
+            </div>
+          </div>
+          <div class="docs-callout">
+            <strong>保存失败不回滚编辑状态</strong>
+            <p>失败时页面继续保持 dirty 状态，恢复快照也会保留。用户可以重试、另存或先复制内容，不会因为一次写盘失败丢失编辑现场。</p>
+          </div>
+        </section>
+
+        <section class="docs-section" id="conflicts">
+          <h2>外部修改与冲突处理</h2>
+          <p>应用会定期检查当前文件的内容哈希和 revision。文件被其他编辑器修改、删除或重命名后，页面会明确说明冲突，而不是继续静默自动保存。</p>
+          <ol>
+            <li><strong>重新载入：</strong>放弃本地未保存版本，读取磁盘上的最新内容。</li>
+            <li><strong>保留本地并覆盖：</strong>在确认磁盘版本后，用应用中的内容重新提交。</li>
+            <li><strong>另存副本：</strong>把当前内容保存到新路径，保留双方版本，再决定后续处理。</li>
+          </ol>
+          <p>冲突检查同时适用于普通文件和数据库文档模式，避免两种存储路径逐渐出现不同的覆盖行为。</p>
+        </section>
+
+        <section class="docs-section" id="history">
+          <h2>历史与回收站</h2>
+          <p>版本历史保存最近 50 个自动保存快照。恢复历史版本同样需要提供当前 revision，避免恢复旧内容时覆盖另一个窗口刚刚完成的保存。</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>场景</th>
+                  <th>保护动作</th>
+                  <th>恢复入口</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>误覆盖内容</td>
+                  <td>保存前生成历史快照</td>
+                  <td>版本历史中选择“恢复”</td>
+                </tr>
+                <tr>
+                  <td>误删除文档</td>
+                  <td>文件先移动到应用回收站</td>
+                  <td>回收站中恢复到原路径</td>
+                </tr>
+                <tr>
+                  <td>外部文件消失</td>
+                  <td>保留当前编辑内容和恢复快照</td>
+                  <td>重新载入或另存本地副本</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="docs-section" id="recovery">
+          <h2>退出与崩溃恢复</h2>
+          <p>应用在存在未保存内容时，退出流程会先尝试完成保存，并列出仍未落盘的文档。正常关闭后清理对应恢复状态；异常退出则保留下一次启动可读取的轻量快照。</p>
+          <p>恢复快照包含当前文档、内容、revision、内容哈希、编辑模型版本和最后事务编号。启动时如果检测到未处理快照，会明确询问恢复还是丢弃，不会自动把旧内容覆盖到新文件。</p>
+          <div class="docs-callout">
+            <strong>恢复也有版本边界</strong>
+            <p>恢复内容仍需经过当前文档版本校验。如果磁盘文件已经变化，应用会进入冲突处理流程，而不是直接覆盖。</p>
+          </div>
+        </section>
+
+        <section class="docs-section" id="boundaries">
+          <h2>能力边界</h2>
+          <p>这些机制主要防止正常使用中的误覆盖、进程中断和文件竞争。它们不是加密工具，也不能替代操作系统备份。</p>
+          <ul>
+            <li>应用不会把文档上传到云端，网络只在读取 GitHub Releases 等明确功能中被使用。</li>
+            <li>应用数据目录包含历史版本和回收站元数据，应和其他重要目录一起纳入系统备份。</li>
+            <li>如果磁盘损坏、权限被拒绝或系统级工具直接改写文件，应用会尽量保留恢复副本并报告失败，但无法保证物理介质本身可恢复。</li>
+            <li>涉及敏感内容时，应配合加密磁盘、文件权限和可信的备份策略使用。</li>
+          </ul>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-shell footer-inner">
+      <a class="brand" href="./index.html#top">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
+        <span>Markdown Writing</span>
+      </a>
+      <p>本地优先的 Markdown 桌面写作工具。</p>
+      <span id="copyright-year"></span>
+    </div>
+  </footer>
+
+  <script src="./vendor/lucide.min.js?v=20260918-6"></script>
+  <script type="module" src="./docs.js?v=20260918-6"></script>
+</body>
+</html>

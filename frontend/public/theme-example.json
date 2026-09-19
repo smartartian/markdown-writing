@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "my-theme",
+  "name": {
+    "zh-CN": "我的主题",
+    "en": "My Theme"
+  },
+  "description": {
+    "zh-CN": "示例自定义主题。",
+    "en": "Example custom theme."
+  },
+  "variants": {
+    "light": {
+      "tokens": {
+        "bgPage": "#f7f7f4",
+        "surface": "#ffffff",
+        "surfaceSecondary": "#eeeeea",
+        "sidebarBg": "#ecece8",
+        "foreground": "#25272b",
+        "heading": "#111317",
+        "secondary": "#5d6269",
+        "placeholder": "#92979e",
+        "border": "#dcdedf",
+        "divider": "#e7e8e9",
+        "primary": "#4169a8",
+        "primaryHover": "#315586",
+        "accent": "#4169a8",
+        "accentSoft": "rgba(65,105,168,0.12)",
+        "error": "#d95c5c",
+        "success": "#4f8f67"
+      }
+    },
+    "dark": {
+      "tokens": {
+        "bgPage": "#171a1d",
+        "surface": "#22262a",
+        "surfaceSecondary": "#2b3035",
+        "sidebarBg": "#14171a",
+        "foreground": "#e6e9ec",
+        "heading": "#ffffff",
+        "secondary": "#b6bdc4",
+        "placeholder": "#747d86",
+        "border": "#383e44",
+        "divider": "#30363c",
+        "primary": "#7fa8e8",
+        "primaryHover": "#9cbbec",
+        "accent": "#7fa8e8",
+        "accentSoft": "rgba(127,168,232,0.15)",
+        "error": "#ff7f7f",
+        "success": "#79bd8f"
+      }
+    }
+  }
+}

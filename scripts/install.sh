@@ -4,7 +4,7 @@ set -eu
 APP_NAME='Markdown Writing'
 APP_BUNDLE='Markdown Writing.app'
 VERSION='0.0.1'
-DMG_URL="https://github.com/smartartian/Markdown-writing/releases/download/md-editor-v${VERSION}/Markdown.Writing_${VERSION}_aarch64.dmg"
+DMG_URL="https://github.com/smartartian/Markdown-writing/releases/download/v${VERSION}/Markdown%20Writing-${VERSION}-macos-arm64.dmg"
 DMG_SHA256="${MD_EDITOR_DMG_SHA256:-}"
 INSTALL_DIR="${MD_EDITOR_INSTALL_DIR:-/Applications}"
 KEEP_DMG="${MD_EDITOR_KEEP_DMG:-0}"

@@ -50,12 +50,28 @@ export function DeleteDocument(arg1) {
   return window['go']['main']['App']['DeleteDocument'](arg1);
 }
 
+export function DeleteUserPlugin(arg1) {
+  return window['go']['main']['App']['DeleteUserPlugin'](arg1);
+}
+
+export function DeleteUserTheme(arg1) {
+  return window['go']['main']['App']['DeleteUserTheme'](arg1);
+}
+
 export function GetAppState() {
   return window['go']['main']['App']['GetAppState']();
 }
 
 export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
+}
+
+export function GetThemesDirectory() {
+  return window['go']['main']['App']['GetThemesDirectory']();
+}
+
+export function GetUserPluginsDirectory() {
+  return window['go']['main']['App']['GetUserPluginsDirectory']();
 }
 
 export function ListDocumentTree(arg1) {
@@ -76,6 +92,14 @@ export function ListRecentFiles(arg1) {
 
 export function ListRecycleBin(arg1) {
   return window['go']['main']['App']['ListRecycleBin'](arg1);
+}
+
+export function ListUserPlugins() {
+  return window['go']['main']['App']['ListUserPlugins']();
+}
+
+export function ListUserThemes() {
+  return window['go']['main']['App']['ListUserThemes']();
 }
 
 export function LoadAppSettings() {
@@ -110,6 +134,10 @@ export function ReadDocumentWithMeta(arg1) {
   return window['go']['main']['App']['ReadDocumentWithMeta'](arg1);
 }
 
+export function ReadImageAsset(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ReadImageAsset'](arg1, arg2, arg3);
+}
+
 export function RenameDocument(arg1, arg2) {
   return window['go']['main']['App']['RenameDocument'](arg1, arg2);
 }
@@ -122,6 +150,14 @@ export function RestoreRecycleItem(arg1) {
   return window['go']['main']['App']['RestoreRecycleItem'](arg1);
 }
 
+export function RevealThemesDirectory() {
+  return window['go']['main']['App']['RevealThemesDirectory']();
+}
+
+export function RevealUserPluginsDirectory() {
+  return window['go']['main']['App']['RevealUserPluginsDirectory']();
+}
+
 export function SaveAppSetting(arg1, arg2) {
   return window['go']['main']['App']['SaveAppSetting'](arg1, arg2);
 }
@@ -132,6 +168,14 @@ export function SaveDocumentAs(arg1) {
 
 export function SaveRecoveryState(arg1) {
   return window['go']['main']['App']['SaveRecoveryState'](arg1);
+}
+
+export function SaveUserPlugin(arg1, arg2) {
+  return window['go']['main']['App']['SaveUserPlugin'](arg1, arg2);
+}
+
+export function SaveUserTheme(arg1, arg2) {
+  return window['go']['main']['App']['SaveUserTheme'](arg1, arg2);
 }
 
 export function SelectDocumentDir() {
@@ -148,4 +192,8 @@ export function WriteDocument(arg1, arg2) {
 
 export function WriteDocumentVersioned(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['WriteDocumentVersioned'](arg1, arg2, arg3, arg4);
+}
+
+export function WriteImageAsset(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['WriteImageAsset'](arg1, arg2, arg3, arg4);
 }

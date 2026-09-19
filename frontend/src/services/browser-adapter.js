@@ -1,5 +1,9 @@
+import { version as APP_VERSION } from '../../package.json';
+
 const browserFiles = new Map();
 const browserRecycle = [];
+const BROWSER_THEMES_KEY = 'md_editor_user_themes';
+const BROWSER_PLUGINS_KEY = 'md_editor_user_plugins';
 let browserFileInput = null;
 let browserRootDir = '';
 
@@ -147,6 +151,24 @@ function writeDocument(path, content) {
   }
 }
 
+function writeImageAsset(_documentPath, _imageDir, fileName, data) {
+  const extension = String(fileName || '').split('.').pop().toLowerCase();
+  const mimeTypes = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
+  };
+  return Promise.resolve(`data:${mimeTypes[extension] || 'application/octet-stream'};base64,${data}`);
+}
+
+function readImageAsset(_documentPath, _imageDir, source) {
+  return Promise.resolve(source);
+}
+
 function writeDocumentVersioned(path, content, expectedRevision, expectedHash) {
   let file = browserFiles.get(path);
   if (!file) {
@@ -210,7 +232,7 @@ function deleteDocument(path) {
 
 function renameDocument(path, newName) {
   const file = browserFiles.get(path);
-  if (!file) return;
+  if (!file) return null;
   const dir = path.substring(0, path.lastIndexOf('/'));
   const fullName = newName.endsWith('.md') ? newName : newName + '.md';
   const newPath = dir + '/' + fullName;
@@ -218,6 +240,13 @@ function renameDocument(path, newName) {
   file.path = newPath;
   browserFiles.delete(path);
   browserFiles.set(newPath, file);
+  return {
+    name: fullName,
+    path: newPath,
+    size: file.size,
+    modTime: file.modTime,
+    isDir: false,
+  };
 }
 
 function openDocumentFile() {
@@ -412,6 +441,50 @@ function listRecycleBin() {
   ];
 }
 
+function listUserThemes() {
+  try {
+    const raw = localStorage.getItem(BROWSER_THEMES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveUserTheme(id, content) {
+  const parsed = JSON.parse(content);
+  const themes = listUserThemes();
+  themes[id] = JSON.stringify(parsed);
+  localStorage.setItem(BROWSER_THEMES_KEY, JSON.stringify(themes));
+}
+
+function deleteUserTheme(id) {
+  const themes = listUserThemes();
+  delete themes[id];
+  localStorage.setItem(BROWSER_THEMES_KEY, JSON.stringify(themes));
+}
+
+function listUserPlugins() {
+  try {
+    const raw = localStorage.getItem(BROWSER_PLUGINS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveUserPlugin(id, content) {
+  const parsed = JSON.parse(content);
+  const plugins = listUserPlugins();
+  plugins[id] = JSON.stringify(parsed);
+  localStorage.setItem(BROWSER_PLUGINS_KEY, JSON.stringify(plugins));
+}
+
+function deleteUserPlugin(id) {
+  const plugins = listUserPlugins();
+  delete plugins[id];
+  localStorage.setItem(BROWSER_PLUGINS_KEY, JSON.stringify(plugins));
+}
+
 export const browserAdapter = {
   name: 'browser',
   selectDocumentDir,
@@ -419,7 +492,9 @@ export const browserAdapter = {
   listDocumentTree,
   readDocument,
   readDocumentWithMeta,
+  readImageAsset,
   writeDocument,
+  writeImageAsset,
   writeDocumentVersioned,
   listFileVersions,
   restoreFileVersion,
@@ -434,7 +509,7 @@ export const browserAdapter = {
   addRecentFile: async () => {},
   listRecentFiles: async () => [],
   getAppState: async () => null,
-  getAppVersion: async () => '0.0.1',
+  getAppVersion: async () => APP_VERSION,
   createDbDocument,
   readDbDocument,
   updateDbDocument,
@@ -444,6 +519,16 @@ export const browserAdapter = {
   restoreDbDocumentVersion,
   saveAppSetting: async () => {},
   loadAppSettings: async () => ({}),
+  getThemesDirectory: async () => 'Browser localStorage: md_editor_user_themes',
+  listUserThemes: async () => listUserThemes(),
+  saveUserTheme: async (id, content) => saveUserTheme(id, content),
+  deleteUserTheme: async id => deleteUserTheme(id),
+  revealThemesDirectory: async () => {},
+  getUserPluginsDirectory: async () => 'Browser localStorage: md_editor_user_plugins',
+  listUserPlugins: async () => listUserPlugins(),
+  saveUserPlugin: async (id, content) => saveUserPlugin(id, content),
+  deleteUserPlugin: async id => deleteUserPlugin(id),
+  revealUserPluginsDirectory: async () => {},
   saveRecoveryState: async payload => localStorage.setItem('md_editor_recovery', payload),
   loadRecoveryState: async () => localStorage.getItem('md_editor_recovery') || '',
   clearRecoveryState: async () => localStorage.removeItem('md_editor_recovery'),

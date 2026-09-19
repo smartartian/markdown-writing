@@ -4,29 +4,48 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Markdown Writing 是一个本地优先的 Markdown 桌面写作工具，文档留在磁盘，打开即写，导出无忧。">
+  <meta name="theme-color" content="#f5f2ec">
+  <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/">
+  <link rel="icon" type="image/png" href="./assets/logo-64.png">
+  <link rel="apple-touch-icon" href="./assets/logo-128.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Markdown Writing">
+  <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/">
+  <meta property="og:title" content="Markdown Writing - 把写作留给文字">
+  <meta property="og:description" content="本地优先、稳定保存、Markdown 原生。文档留在磁盘，打开即写。">
+  <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Markdown Writing - 把写作留给文字">
+  <meta name="twitter:description" content="本地优先的 Markdown 桌面写作工具。">
+  <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <title>Markdown Writing - 把写作留给文字</title>
-  <link rel="stylesheet" href="./styles.css">
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="./styles.css?v=20260918-6">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
   <header class="site-header" id="site-header">
     <div class="nav-shell">
       <a class="brand" href="#top" aria-label="Markdown Writing 首页">
-        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
         <span>Markdown Writing</span>
       </a>
       <nav class="desktop-nav" aria-label="主导航">
         <a href="#features">功能</a>
         <a href="#workflow">工作流</a>
+        <a href="#security">数据安全</a>
         <a href="#export">导出</a>
         <a href="./updates.html">更新记录</a>
         <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-small button-dark" href="#download">
+        <a class="button button-small button-dark" href="#download" data-download-primary>
           <i data-lucide="download"></i>
-          下载
+          <span data-download-label>下载</span>
         </a>
-        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-expanded="false">
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
           <i data-lucide="menu"></i>
         </button>
       </div>
@@ -34,6 +53,7 @@
     <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
       <a href="#features">功能</a>
       <a href="#workflow">工作流</a>
+      <a href="#security">数据安全</a>
       <a href="#export">导出</a>
       <a href="./updates.html">更新记录</a>
       <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
@@ -41,16 +61,17 @@
     </nav>
   </header>
 
-  <main id="top">
+  <main id="main-content">
+    <span id="top"></span>
     <section class="hero section-shell">
       <div class="hero-copy reveal">
         <span class="eyebrow">本地优先的 Markdown 桌面写作工具</span>
         <h1>把写作，<br>留给文字。</h1>
         <p>文档留在磁盘，打开即写，格式随文字自然生长。 Markdown Writing 将专注、本地存储和可靠导出放回同一个安静的工作台。</p>
         <div class="hero-actions">
-          <a class="button button-dark" href="#download">
+          <a class="button button-dark" href="#download" data-download-primary>
             <i data-lucide="monitor-down"></i>
-            获取桌面版
+            <span data-download-label>获取桌面版</span>
           </a>
           <a class="button button-light" href="#features">
             探索核心功能
@@ -211,6 +232,39 @@
       </div>
     </section>
 
+    <section class="security-band" id="security">
+      <div class="section-shell security-layout">
+        <div class="security-copy reveal">
+          <span class="eyebrow">数据安全不是附加项</span>
+          <h2>先保证不丢，再谈功能。</h2>
+          <p>从 revision 检查到原子写入，再到版本历史与崩溃恢复，Markdown Writing 把保护原文放在所有编辑体验之前。</p>
+          <a class="button button-dark" href="./docs.html">查看安全设计</a>
+        </div>
+        <div class="security-grid">
+          <article class="security-card reveal">
+            <i data-lucide="git-compare-arrows"></i>
+            <strong>Revision 冲突检测</strong>
+            <span>外部修改不会被静默覆盖</span>
+          </article>
+          <article class="security-card reveal">
+            <i data-lucide="file-check-2"></i>
+            <strong>原子写入</strong>
+            <span>临时文件完成后替换原文档</span>
+          </article>
+          <article class="security-card reveal">
+            <i data-lucide="history"></i>
+            <strong>版本历史</strong>
+            <span>保留最近 50 个自动保存快照</span>
+          </article>
+          <article class="security-card reveal">
+            <i data-lucide="life-buoy"></i>
+            <strong>崩溃恢复</strong>
+            <span>启动时恢复未保存内容</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="section-shell section-block" id="export">
       <div class="section-heading centered reveal">
         <span class="eyebrow">Markdown 是起点，不是终点</span>
@@ -241,17 +295,33 @@
       </div>
     </section>
 
+    <section class="section-shell latest-release reveal" aria-labelledby="latest-release-title">
+      <div class="latest-release-copy">
+        <span class="eyebrow">GitHub Releases</span>
+        <h2 id="latest-release-title">最新版本</h2>
+        <strong id="latest-version">正在读取版本信息...</strong>
+        <span id="latest-date"></span>
+        <p id="latest-notes">发布后，这里会同步最新变更和下载入口。</p>
+      </div>
+      <div class="latest-release-actions">
+        <span id="download-detail">正在检测你的平台...</span>
+        <a class="button button-dark" id="latest-release-link" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+          查看完整更新记录
+        </a>
+      </div>
+    </section>
+
     <section class="download-band" id="download">
       <div class="section-shell download-inner reveal">
         <div>
-          <span class="eyebrow light">MARKDOWN WRITING 0.0.1</span>
+          <span class="eyebrow light" id="download-version">MARKDOWN WRITING</span>
           <h2>把下一篇文章，写在自己的磁盘上。</h2>
           <p>下载桌面版，选择一个文件夹，然后直接开始。</p>
         </div>
         <div class="download-actions">
-          <a class="button button-paper" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+          <a class="button button-paper" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer" data-download-primary>
             <i data-lucide="download"></i>
-            下载 macOS 版
+            <span data-download-label>下载 macOS 版</span>
           </a>
           <a class="button button-ghost" href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">
             <i data-lucide="code-2"></i>
@@ -265,7 +335,7 @@
   <footer class="site-footer">
     <div class="section-shell footer-inner">
       <a class="brand" href="#top">
-        <img src="./assets/logo.png" alt="" class="brand-mark">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
         <span>Markdown Writing</span>
       </a>
       <p>本地优先的 Markdown 桌面写作工具。</p>
@@ -273,7 +343,7 @@
     </div>
   </footer>
 
-  <script src="./vendor/lucide.min.js"></script>
-  <script src="./main.js"></script>
+  <script src="./vendor/lucide.min.js?v=20260918-6"></script>
+  <script type="module" src="./main.js?v=20260918-6"></script>
 </body>
 </html>

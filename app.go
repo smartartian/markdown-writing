@@ -4,15 +4,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	_ "embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -429,6 +434,204 @@ func (a *App) WriteDocument(path, content string) error {
 	return atomicWriteFile(path, []byte(content), 0644)
 }
 
+// WriteImageAsset writes an image below the active document root and returns
+// a Markdown-friendly path relative to the document file.
+func (a *App) WriteImageAsset(documentPath, imageDir, fileName, encoded string) (string, error) {
+	if err := a.requireAllowedPath(documentPath); err != nil {
+		return "", err
+	}
+	canonicalDocument, err := canonicalPath(documentPath)
+	if err != nil {
+		return "", err
+	}
+
+	documentDir := filepath.Dir(canonicalDocument)
+	root := documentDir
+
+	cleanDir := filepath.Clean(filepath.FromSlash(strings.TrimSpace(imageDir)))
+	if cleanDir == "" || cleanDir == "." {
+		cleanDir = "assets"
+	}
+	if filepath.IsAbs(cleanDir) || cleanDir == ".." ||
+		strings.HasPrefix(cleanDir, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("image directory must stay inside the document root")
+	}
+
+	targetDir := filepath.Join(documentDir, cleanDir)
+	canonicalDir, err := canonicalPath(targetDir)
+	if err != nil {
+		return "", err
+	}
+	if !pathWithin(root, canonicalDir) {
+		return "", fmt.Errorf("image directory is outside the document root")
+	}
+	if err := os.MkdirAll(canonicalDir, 0755); err != nil {
+		return "", err
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileName))
+	if imageMimeType(ext) == "" {
+		return "", fmt.Errorf("unsupported image type: %s", ext)
+	}
+
+	if strings.HasPrefix(encoded, "data:") {
+		if comma := strings.IndexByte(encoded, ','); comma >= 0 {
+			encoded = encoded[comma+1:]
+		}
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("image is empty")
+	}
+	if len(data) > 20*1024*1024 {
+		return "", fmt.Errorf("image exceeds 20 MB")
+	}
+
+	baseName := sanitizeAssetName(strings.TrimSuffix(filepath.Base(fileName), filepath.Ext(fileName)))
+	if baseName == "" {
+		baseName = "image"
+	}
+	targetPath := filepath.Join(canonicalDir, baseName+ext)
+	for index := 1; ; index++ {
+		if _, statErr := os.Stat(targetPath); os.IsNotExist(statErr) {
+			break
+		}
+		targetPath = filepath.Join(canonicalDir, fmt.Sprintf("%s-%d%s", baseName, index, ext))
+	}
+	if err := atomicWriteFile(targetPath, data, 0644); err != nil {
+		return "", err
+	}
+
+	relative, err := filepath.Rel(filepath.Dir(canonicalDocument), targetPath)
+	if err != nil {
+		return "", err
+	}
+	relative = filepath.ToSlash(relative)
+	if !strings.HasPrefix(relative, ".") {
+		relative = "./" + relative
+	}
+	return relative, nil
+}
+
+// ReadImageAsset resolves a Markdown image source relative to the active
+// document and the configured image directory, then returns a data URL that
+// can be rendered safely inside the WebView.
+func (a *App) ReadImageAsset(documentPath, imageDir, source string) (string, error) {
+	if err := a.requireAllowedPath(documentPath); err != nil {
+		return "", err
+	}
+	canonicalDocument, err := canonicalPath(documentPath)
+	if err != nil {
+		return "", err
+	}
+
+	cleanDir := filepath.Clean(filepath.FromSlash(strings.TrimSpace(imageDir)))
+	if cleanDir == "" || cleanDir == "." {
+		cleanDir = "assets"
+	}
+	if filepath.IsAbs(cleanDir) || cleanDir == ".." ||
+		strings.HasPrefix(cleanDir, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("image directory must stay inside the document root")
+	}
+
+	cleanSource := filepath.Clean(filepath.FromSlash(strings.TrimSpace(source)))
+	if cleanSource == "" || cleanSource == "." {
+		return "", fmt.Errorf("image source is empty")
+	}
+
+	a.mu.RLock()
+	root := a.docDir
+	a.mu.RUnlock()
+	documentDir := filepath.Dir(canonicalDocument)
+	if root == "" {
+		root = documentDir
+	}
+
+	candidates := make([]string, 0, 2)
+	if filepath.IsAbs(cleanSource) {
+		candidates = append(candidates, cleanSource)
+	} else {
+		sourceSlash := filepath.ToSlash(cleanSource)
+		imageDirSlash := filepath.ToSlash(cleanDir)
+		isExplicitImageDir := sourceSlash == imageDirSlash ||
+			strings.HasPrefix(sourceSlash, imageDirSlash+"/")
+		if isExplicitImageDir {
+			candidates = append(candidates, filepath.Join(documentDir, cleanSource))
+		} else {
+			candidates = append(candidates,
+				filepath.Join(documentDir, cleanDir, cleanSource),
+				filepath.Join(documentDir, cleanSource),
+			)
+		}
+	}
+
+	for _, candidate := range candidates {
+		canonicalCandidate, err := canonicalPath(candidate)
+		if err != nil || !pathWithin(root, canonicalCandidate) {
+			continue
+		}
+		info, err := os.Stat(canonicalCandidate)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(canonicalCandidate))
+		mimeType := imageMimeType(ext)
+		if mimeType == "" {
+			continue
+		}
+		if info.Size() > 20*1024*1024 {
+			return "", fmt.Errorf("image exceeds 20 MB")
+		}
+		data, err := os.ReadFile(canonicalCandidate)
+		if err != nil {
+			continue
+		}
+		return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	}
+
+	return "", fmt.Errorf("image asset not found: %s", source)
+}
+
+func imageMimeType(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return ""
+	}
+}
+
+func sanitizeAssetName(name string) string {
+	var builder strings.Builder
+	previousDash := false
+	for _, char := range strings.TrimSpace(name) {
+		valid := unicode.IsLetter(char) || unicode.IsDigit(char) || char == '-' || char == '_'
+		if valid {
+			builder.WriteRune(char)
+			previousDash = false
+			continue
+		}
+		if !previousDash {
+			builder.WriteByte('-')
+			previousDash = true
+		}
+	}
+	return strings.Trim(builder.String(), "-")
+}
+
 // WriteDocumentVersioned writes a file only when its revision still matches
 func (a *App) WriteDocumentVersioned(path, content string, expectedRevision int64, expectedHash string) (int64, error) {
 	if err := a.requireAllowedPath(path); err != nil {
@@ -699,9 +902,18 @@ func (a *App) RenameDocument(oldPath, newName string) (Document, error) {
 	}, nil
 }
 
+// frontendPackageJSON 是前端 package.json，作为版本号的唯一权威来源。
+//
+//go:embed frontend/package.json
+var frontendPackageJSON []byte
+
 // GetAppVersion returns the current application version
 func (a *App) GetAppVersion() string {
-	return "0.0.1"
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	_ = json.Unmarshal(frontendPackageJSON, &pkg)
+	return pkg.Version
 }
 
 // SetPendingChanges records whether the frontend still has unsaved content
@@ -864,6 +1076,218 @@ func (a *App) LoadAppSettings() (map[string]string, error) {
 		return map[string]string{}, nil
 	}
 	return a.db.GetAllSettings()
+}
+
+func safeThemeID(id string) (string, error) {
+	value := strings.TrimSpace(strings.ToLower(id))
+	if len(value) < 2 || len(value) > 64 {
+		return "", fmt.Errorf("theme id length must be between 2 and 64")
+	}
+	for index, char := range value {
+		valid := (char >= 'a' && char <= 'z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_'
+		if !valid || (index == 0 && !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9'))) {
+			return "", fmt.Errorf("invalid theme id")
+		}
+	}
+	return value, nil
+}
+
+func (a *App) themesDir() (string, error) {
+	base := a.configDir
+	if base == "" {
+		var err error
+		base, err = os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(base, "md-editor-desktop")
+	}
+	dir := filepath.Join(base, "themes")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// GetThemesDirectory returns the directory used for user theme JSON files.
+func (a *App) GetThemesDirectory() (string, error) {
+	return a.themesDir()
+}
+
+// ListUserThemes returns theme files keyed by id.
+func (a *App) ListUserThemes() (map[string]string, error) {
+	dir, err := a.themesDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	themes := make(map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		content, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		themes[id] = string(content)
+	}
+	return themes, nil
+}
+
+// SaveUserTheme validates and stores one user theme JSON file.
+func (a *App) SaveUserTheme(id, content string) error {
+	themeID, err := safeThemeID(id)
+	if err != nil {
+		return err
+	}
+	if !json.Valid([]byte(content)) {
+		return fmt.Errorf("theme content must be valid JSON")
+	}
+	dir, err := a.themesDir()
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(filepath.Join(dir, themeID+".json"), []byte(content), 0644)
+}
+
+// DeleteUserTheme removes a user theme JSON file.
+func (a *App) DeleteUserTheme(id string) error {
+	themeID, err := safeThemeID(id)
+	if err != nil {
+		return err
+	}
+	dir, err := a.themesDir()
+	if err != nil {
+		return err
+	}
+	err = os.Remove(filepath.Join(dir, themeID+".json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// RevealThemesDirectory opens the user theme directory in the platform file manager.
+func (a *App) RevealThemesDirectory() error {
+	dir, err := a.themesDir()
+	if err != nil {
+		return err
+	}
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "darwin":
+		command = exec.Command("open", dir)
+	case "windows":
+		command = exec.Command("explorer", dir)
+	default:
+		command = exec.Command("xdg-open", dir)
+	}
+	return command.Start()
+}
+
+func (a *App) pluginsDir() (string, error) {
+	base := a.configDir
+	if base == "" {
+		var err error
+		base, err = os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(base, "md-editor-desktop")
+	}
+	dir := filepath.Join(base, "plugins")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// GetUserPluginsDirectory returns the directory used for user plugin JSON files.
+func (a *App) GetUserPluginsDirectory() (string, error) {
+	return a.pluginsDir()
+}
+
+// ListUserPlugins returns plugin package files keyed by id.
+func (a *App) ListUserPlugins() (map[string]string, error) {
+	dir, err := a.pluginsDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	plugins := make(map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		content, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		plugins[id] = string(content)
+	}
+	return plugins, nil
+}
+
+// SaveUserPlugin validates and stores one user plugin JSON file.
+func (a *App) SaveUserPlugin(id, content string) error {
+	pluginID, err := safeThemeID(id)
+	if err != nil {
+		return err
+	}
+	if !json.Valid([]byte(content)) {
+		return fmt.Errorf("plugin content must be valid JSON")
+	}
+	dir, err := a.pluginsDir()
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(filepath.Join(dir, pluginID+".json"), []byte(content), 0644)
+}
+
+// DeleteUserPlugin removes a user plugin JSON file.
+func (a *App) DeleteUserPlugin(id string) error {
+	pluginID, err := safeThemeID(id)
+	if err != nil {
+		return err
+	}
+	dir, err := a.pluginsDir()
+	if err != nil {
+		return err
+	}
+	err = os.Remove(filepath.Join(dir, pluginID+".json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// RevealUserPluginsDirectory opens the user plugin directory in the platform file manager.
+func (a *App) RevealUserPluginsDirectory() error {
+	dir, err := a.pluginsDir()
+	if err != nil {
+		return err
+	}
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "darwin":
+		command = exec.Command("open", dir)
+	case "windows":
+		command = exec.Command("explorer", dir)
+	default:
+		command = exec.Command("xdg-open", dir)
+	}
+	return command.Start()
 }
 
 // AddRecentFile adds a file to the recent list

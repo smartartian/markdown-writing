@@ -1,38 +1,13 @@
 import './style.css';
 
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
-import {
-  createIcons,
-  AlignLeft,
-  BookOpen,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Code,
-  Download,
-  Eye,
-  FileCode,
-  FilePlus,
-  FileText,
-  FileType,
-  FileUp,
-  Folder,
-  FolderOpen,
-  History,
-  Image,
-  Library,
-  List,
-  PanelLeft,
-  PenLine,
-  Plus,
-  Search,
-  Settings,
-  Trash2,
-  X,
-} from 'lucide';
-import { WindowGetPosition, WindowSetPosition, EventsOn } from '../wailsjs/runtime/runtime';
+import { version as APP_VERSION } from '../package.json';
+import { BrowserOpenURL, WindowGetPosition, WindowSetPosition, EventsOn } from '../wailsjs/runtime/runtime';
+import { bootstrapApplication } from './app/bootstrap';
 import { state } from './core/state';
+import { t } from './i18n';
+import { createMarkdownAssetResolver } from './markdown/assets.js';
+import { createMarkdownRenderer } from './markdown/renderer.js';
+import { sanitizeMarkdownHtml } from './markdown/sanitizer.js';
 import {
   applyModelSelection,
   createPosition,
@@ -43,6 +18,7 @@ import {
 } from './editor-core/selection/index.js';
 import { createCompositionController } from './editor-core/composition/index.js';
 import { createBuiltinCommands } from './editor-core/commands/index.js';
+import { parseMarkdown } from './editor-core/parser/block-parser.js';
 import { createEditorSession } from './editor-core/session/index.js';
 import { serializeDocument } from './editor-core/serializer/markdown-serializer.js';
 import { createParserWorkerClient } from './editor-core/worker/index.js';
@@ -51,53 +27,38 @@ import { createEditorCore } from './modules/editor';
 import { createExportModule } from './modules/export';
 import { createFileTreeModule } from './modules/file-tree';
 import { createSafetyModule } from './modules/safety';
-import { createSettingsModule } from './modules/settings';
+import { createSettingsModule, matchesShortcut } from './modules/settings';
+import { createAppPluginRuntime } from './plugin-runtime';
 import { isBrowserMode, storage } from './services/document-store';
-
-const LUCIDE_ICONS = {
-  AlignLeft,
-  BookOpen,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Code,
-  Download,
-  Eye,
-  FileCode,
-  FilePlus,
-  FileText,
-  FileType,
-  FileUp,
-  Folder,
-  FolderOpen,
-  History,
-  Image,
-  Library,
-  List,
-  PanelLeft,
-  PenLine,
-  Plus,
-  Search,
-  Settings,
-  Trash2,
-  X,
-};
+import { brandHeroHtml } from './ui/brand';
+import { autoResizeTextarea, debounce, escapeHtml, qs } from './ui/dom';
+import { findTextMatches, replaceAllText, replaceTextRange } from './ui/editor/find-replace';
+import { renderIcons as lucideIcons } from './ui/icons';
+import {
+  buildOutlineTree,
+  headingsFromDocument,
+  headingsFromMarkdown,
+  renderOutlineTree,
+} from './ui/outline';
+import { createHomeView } from './ui/views/home';
+import { createWindowDragController } from './ui/window-drag';
 
 const {
-  selectDocumentDir: SelectDocumentDir,
-  listDocuments: ListDocuments,
-  listDocumentTree: ListDocumentTree,
-  readDocument: ReadDocument,
-  readDocumentWithMeta: ReadDocumentWithMeta,
-  writeDocument: WriteDocument,
+  selectDocumentDir: NativeSelectDocumentDir,
+  listDocuments: NativeListDocuments,
+  listDocumentTree: NativeListDocumentTree,
+  readDocument: NativeReadDocument,
+  readDocumentWithMeta: NativeReadDocumentWithMeta,
+  readImageAsset: NativeReadImageAsset,
+  writeDocument: NativeWriteDocument,
+  writeImageAsset: NativeWriteImageAsset,
   writeDocumentVersioned: WriteDocumentVersioned,
-  listFileVersions: ListFileVersions,
-  restoreFileVersion: RestoreFileVersion,
-  createDocument: CreateDocument,
-  deleteDocument: DeleteDocument,
-  listRecycleBin: ListRecycleBin,
-  restoreRecycleItem: RestoreRecycleItem,
-  purgeRecycleItem: PurgeRecycleItem,
+  listFileVersions: NativeListFileVersions,
+  restoreFileVersion: NativeRestoreFileVersion,
+  deleteDocument: NativeDeleteDocument,
+  listRecycleBin: NativeListRecycleBin,
+  restoreRecycleItem: NativeRestoreRecycleItem,
+  purgeRecycleItem: NativePurgeRecycleItem,
   renameDocument: RenameDocument,
   openDocumentFile: OpenDocumentFile,
   saveDocumentAs: SaveDocumentAs,
@@ -105,13 +66,6 @@ const {
   listRecentFiles: ListRecentFiles,
   getAppState: GetAppState,
   getAppVersion: GetAppVersion,
-  createDbDocument: DBCreateDocument,
-  readDbDocument: DBReadDocument,
-  updateDbDocument: DBUpdateDocument,
-  deleteDbDocument: DBDeleteDocument,
-  listDbDocuments: DBListDocuments,
-  listDbDocumentVersions: DBListDocumentVersions,
-  restoreDbDocumentVersion: DBRestoreDocumentVersion,
   saveAppSetting: SaveAppSetting,
   loadAppSettings: LoadAppSettings,
   saveRecoveryState: SaveRecoveryState,
@@ -121,13 +75,49 @@ const {
   confirmClose: ConfirmClose,
 } = storage;
 
-const APP_VERSION = '0.0.1';
+let pluginRuntime = null;
+
+function pluginServiceProxy(serviceName, method, fallback) {
+  return (...args) => {
+    if (pluginRuntime) return pluginRuntime.invokeService(serviceName, method, fallback, ...args);
+    return fallback(...args);
+  };
+}
+
+const SelectDocumentDir = pluginServiceProxy('workspace', 'selectDirectory', NativeSelectDocumentDir);
+const ListDocuments = pluginServiceProxy('workspace', 'listDocuments', NativeListDocuments);
+const ListDocumentTree = pluginServiceProxy('workspace', 'listDocumentTree', NativeListDocumentTree);
+const ReadDocument = pluginServiceProxy('workspace', 'readDocument', NativeReadDocument);
+const ReadDocumentWithMeta = pluginServiceProxy('workspace', 'readDocumentWithMeta', NativeReadDocumentWithMeta);
+const WriteDocument = pluginServiceProxy('workspace', 'writeDocument', NativeWriteDocument);
+const WriteImageAsset = pluginServiceProxy('workspace', 'writeImageAsset', NativeWriteImageAsset);
+const ListFileVersions = pluginServiceProxy('documentStore', 'listFileVersions', NativeListFileVersions);
+const RestoreFileVersion = pluginServiceProxy('documentStore', 'restoreFileVersion', NativeRestoreFileVersion);
+const DeleteDocument = pluginServiceProxy('documentStore', 'deleteDocument', NativeDeleteDocument);
+const ListRecycleBin = pluginServiceProxy('documentStore', 'listRecycleBin', NativeListRecycleBin);
+const RestoreRecycleItem = pluginServiceProxy('documentStore', 'restoreRecycleItem', NativeRestoreRecycleItem);
+const PurgeRecycleItem = pluginServiceProxy('documentStore', 'purgeRecycleItem', NativePurgeRecycleItem);
+
+const windowDrag = createWindowDragController({
+  enabled: !isBrowserMode(),
+  getWindowPosition: WindowGetPosition,
+  setWindowPosition: WindowSetPosition,
+});
+
 const APP_REPO = 'smartartian/Markdown-writing';
 
 // 检查 GitHub 最新版本
 async function checkForUpdate() {
   try {
     const resp = await fetch(`https://api.github.com/repos/${APP_REPO}/releases/latest`);
+    if (resp.status === 404) {
+      return {
+        latest: null,
+        current: APP_VERSION,
+        hasUpdate: false,
+        noRelease: true,
+      };
+    }
     if (!resp.ok) return { error: '无法获取更新信息' };
     const data = await resp.json();
     const latest = data.tag_name.replace(/^v/, '');
@@ -157,7 +147,6 @@ async function saveAppState() {
   try {
     const data = {
       lastView: state.view,
-      isDBMode: state.isDBMode,
       docDir: state.docDir,
     };
     if (state.currentDoc) {
@@ -194,8 +183,6 @@ async function restoreAppState() {
 // ============================================================
 let $app;
 
-function qs(sel, ctx = document) { return ctx.querySelector(sel); }
-
 // ============================================================
 // 工具
 // ============================================================
@@ -219,129 +206,23 @@ function fileNameWithoutExt(name) {
   return name.replace(/\.md$/i, '');
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-const HTML_SANITIZE_CONFIG = {
-  USE_PROFILES: { html: true },
-  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
-  FORBID_ATTR: ['srcdoc'],
-  ALLOW_DATA_ATTR: true,
-};
-
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A') {
-    node.setAttribute('rel', 'noopener noreferrer');
-    if (node.getAttribute('target') === '_blank') {
-      node.setAttribute('target', '_blank');
+const sanitizeHtml = sanitizeMarkdownHtml;
+const markdownRenderer = createMarkdownRenderer({ sanitize: sanitizeHtml });
+const markdownAssetResolver = createMarkdownAssetResolver({
+  getContext: () => {
+    const documentPath = state.currentDoc?.path;
+    if (storage.name !== 'wails' || typeof NativeReadImageAsset !== 'function' || !documentPath) {
+      return null;
     }
-  }
-  if (node.tagName === 'IMG') {
-    node.setAttribute('referrerpolicy', 'no-referrer');
-  }
-});
-
-function sanitizeHtml(html) {
-  return DOMPurify.sanitize(html || '', HTML_SANITIZE_CONFIG);
-}
-
-function debounce(fn, ms) {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
-  };
-}
-
-// ============================================================
-// 窗口拖动（JS 实现，比 -webkit-app-region 更可靠）
-// ============================================================
-let dragState = null;
-
-function startWindowDrag(e) {
-  if (isBrowserMode()) return;
-  const target = e.target;
-  if (target.closest('button, input, textarea, select, [contenteditable], .btn-icon, .btn-primary, .sidebar-resizer, .modal-close')) return;
-
-  dragState = {
-    startScreenX: e.screenX,
-    startScreenY: e.screenY,
-  };
-  document.addEventListener('mousemove', onWindowDrag);
-  document.addEventListener('mouseup', stopWindowDrag);
-  e.preventDefault();
-}
-
-let dragRaf = null;
-let dragStartCursor = '';
-
-function onWindowDrag(e) {
-  if (!dragState) return;
-  if (dragRaf) return; // 节流：每帧只执行一次
-  dragRaf = requestAnimationFrame(() => {
-    dragRaf = null;
-    if (!dragState) return;
-    const dx = e.screenX - dragState.startScreenX;
-    const dy = e.screenY - dragState.startScreenY;
-    // 反向推窗口位置：当前 screenX = winX + clientX（即鼠标在窗口内的偏移）
-    // winX = screenX - offsetX, 这里 offsetX 是在窗口内的相对位置
-    // 用 mousedown 时的差值来反算
-    const newX = e.screenX - (dragState.startScreenX - dragState.startWinX);
-    const newY = e.screenY - (dragState.startScreenY - dragState.startWinY);
-    WindowSetPosition(
-      dragState.startWinX + (e.screenX - dragState.startScreenX),
-      dragState.startWinY + (e.screenY - dragState.startScreenY)
-    );
-  });
-}
-
-function stopWindowDrag() {
-  dragState = null;
-  if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = null; }
-  document.body.style.cursor = dragStartCursor || '';
-  document.body.style.userSelect = '';
-  document.removeEventListener('mousemove', onWindowDrag);
-  document.removeEventListener('mouseup', stopWindowDrag);
-}
-
-// 为整个文档添加拖动支持（仅顶部区域通过 mousedown 坐标判断）
-async function initWindowDrag() {
-  // 先获取一次窗口位置缓存
-  try {
-    const pos = await WindowGetPosition();
-    window.__winPos = pos;
-  } catch (e) { /* ignore */ }
-
-  document.addEventListener('mousedown', (e) => {
-    if (e.clientY > 44) return;
-    // 用缓存的窗口位置 + 当前鼠标屏幕位置与 client 位置的差值来算出 winX/winY
-    const pos = window.__winPos;
-    if (!pos) return;
-    const target = e.target;
-    if (target.closest('button, input, textarea, select, [contenteditable], .btn-icon, .btn-primary, .sidebar-resizer, .modal-close')) return;
-    dragState = {
-      startScreenX: e.screenX,
-      startScreenY: e.screenY,
-      startWinX: pos.x,
-      startWinY: pos.y,
+    return {
+      documentPath,
+      imageDir: getSetting('files.imageDir', 'assets'),
     };
-    dragStartCursor = document.body.style.cursor;
-    document.body.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onWindowDrag);
-    document.addEventListener('mouseup', stopWindowDrag);
-  });
-}
-
-// textarea 自适应高度（把滚动交给外层容器）
-function autoResizeTextarea(el) {
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
-}
+  },
+  resolveAsset: ({ documentPath, imageDir, source }) =>
+    NativeReadImageAsset(documentPath, imageDir, source),
+  getRoot: () => $app || document.body,
+});
 
 // ============================================================
 // 块级编辑器（Typora 风格）
@@ -358,8 +239,8 @@ const {
   getLastParseResult,
   resetParseResult,
 } = createEditorCore({
-  marked,
-  sanitizeHtml,
+  marked: markdownRenderer.marked,
+  renderMarkdown: markdownRenderer.render,
   escapeHtml,
   getActiveBlockIndex: () => activeBlockIndex,
   setActiveBlockIndex: index => { activeBlockIndex = index; },
@@ -520,6 +401,8 @@ function hookBlockEvents() {
       source.addEventListener('dragover', onBlockDragOver);
       source.removeEventListener('drop', onBlockDrop);
       source.addEventListener('drop', onBlockDrop);
+      source.removeEventListener('paste', onBlockPaste);
+      source.addEventListener('paste', onBlockPaste);
     }
   });
 
@@ -776,7 +659,7 @@ function renderBlockFromSource(source, block) {
   block.className = getBlockClassName(blockType, true);
   block.dataset.blockType = blockType.type;
   const newHtml = blockType.raw
-    ? sanitizeHtml(marked.parse(blockType.raw, { breaks: true, gfm: true }))
+    ? markdownRenderer.render(blockType.raw)
     : '<p><br></p>';
   const renderedEl = block.querySelector('.block-rendered');
   if (renderedEl) {
@@ -859,12 +742,7 @@ async function onBlockDrop(e) {
   if (!inserted && files.length > 0) {
     const file = files[0];
     if (file.type.startsWith('image/')) {
-      inserted = await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(`![${file.name}](${reader.result})`);
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(file);
-      });
+      inserted = await createImageMarkdown(file);
     } else {
       inserted = await file.text();
     }
@@ -878,6 +756,67 @@ async function onBlockDrop(e) {
   });
 }
 
+async function onBlockPaste(e) {
+  const imageItem = [...(e.clipboardData?.items || [])]
+    .find(item => item.type.startsWith('image/'));
+  if (!imageItem) return;
+  const file = imageItem.getAsFile();
+  if (!file) return;
+  e.preventDefault();
+
+  const source = e.target.closest?.('.block-source');
+  const block = source?.closest?.('.block');
+  if (!source || !block || !state.editorSession?.document) return;
+  const modelBlock = state.editorSession.document.getBlock(block.dataset.blockId);
+  if (!modelBlock) return;
+
+  const inserted = await createImageMarkdown(file);
+  if (!inserted) return;
+  const selection = domSelectionToModel(qs('#block-editor'));
+  const offset = selection?.anchor.offset ?? modelBlock.raw.length;
+  const raw = modelBlock.raw.slice(0, offset) + inserted + modelBlock.raw.slice(offset);
+  applyModelBlockUpdate(modelBlock.id, raw, offset + inserted.length, {
+    source: 'paste',
+    coalesceKey: null,
+    selection,
+  });
+}
+
+async function createImageMarkdown(file) {
+  const encoded = await fileToBase64(file);
+  const imageDir = getSetting('files.imageDir', 'assets');
+  const configuredWidth = Number(getSetting('files.imageWidth', 100));
+  const imageWidth = Number.isFinite(configuredWidth)
+    ? Math.max(10, Math.min(100, Math.round(configuredWidth)))
+    : 100;
+  const widthAttribute = imageWidth < 100 ? `{width=${imageWidth}%}` : '';
+  const documentPath = state.currentDoc?.path;
+  const alt = String(file.name || 'image').replace(/[\[\]]/g, '');
+
+  if (documentPath && typeof WriteImageAsset === 'function') {
+    try {
+      const relativePath = await WriteImageAsset(documentPath, imageDir, file.name || 'image.png', encoded);
+      return `![${alt}](${relativePath})${widthAttribute}`;
+    } catch (error) {
+      console.error('保存图片资源失败，回退为内嵌图片:', error);
+    }
+  }
+
+  const mime = file.type || 'image/png';
+  return `![${alt}](data:${mime};base64,${encoded})${widthAttribute}`;
+}
+
+async function fileToBase64(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function onBlockKeydown(e) {
   const source = e.target;
   const block = source.closest('.block');
@@ -886,38 +825,97 @@ function onBlockKeydown(e) {
   const isCmd = e.metaKey || e.ctrlKey;
   const key = e.key.toLowerCase();
 
-  if (isCmd && key === 'z' && !e.shiftKey) {
+  if (matchesShortcut(e, getSetting('shortcuts.toggleSource', 'Cmd+/'))) {
+    e.preventDefault();
+    toggleSourceMode();
+    return;
+  }
+
+  if (matchesShortcut(e, getSetting('shortcuts.undo', 'Cmd+Z'))) {
     e.preventDefault();
     undoEditor();
     return;
   }
-  if (isCmd && ((key === 'z' && e.shiftKey) || key === 'y')) {
+  if (matchesShortcut(e, getSetting('shortcuts.redo', 'Cmd+Shift+Z')) || (isCmd && key === 'y' && !e.altKey)) {
     e.preventDefault();
     redoEditor();
     return;
   }
 
-  if (isCmd && key === 'b') {
+  if (matchesShortcut(e, getSetting('shortcuts.bold', 'Cmd+B'))) {
     e.preventDefault();
     executeEditorCommand('toggleStrong');
     return;
   }
-  if (isCmd && key === 'i') {
+  if (matchesShortcut(e, getSetting('shortcuts.italic', 'Cmd+I'))) {
     e.preventDefault();
     executeEditorCommand('toggleEmphasis');
     return;
   }
-  if (isCmd && e.shiftKey && key === 'x') {
+  if (matchesShortcut(e, getSetting('shortcuts.strike', 'Cmd+Shift+S'))) {
     e.preventDefault();
     executeEditorCommand('toggleStrike');
     return;
   }
-  if (isCmd && e.altKey && key === '1') {
+  if (matchesShortcut(e, getSetting('shortcuts.inlineCode', 'Cmd+E'))) {
     e.preventDefault();
-    executeEditorCommand('toggleHeading');
+    executeEditorCommand('toggleInlineCode');
     return;
   }
-  if (isCmd && e.altKey && key === 't') {
+  if (matchesShortcut(e, getSetting('shortcuts.highlight', 'Cmd+Shift+H'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleHighlight');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.link', 'Cmd+K'))) {
+    e.preventDefault();
+    executeEditorCommand('insertLink');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.codeBlock', 'Cmd+Shift+C'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleCodeBlock');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.quote', 'Cmd+Shift+Q'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleQuote');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.unorderedList', 'Cmd+Shift+U'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleUnorderedList');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.orderedList', 'Cmd+Shift+O'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleOrderedList');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.taskList', 'Cmd+Shift+T'))) {
+    e.preventDefault();
+    executeEditorCommand('toggleTaskList');
+    return;
+  }
+
+  for (let level = 1; level <= 6; level += 1) {
+    if (matchesShortcut(e, getSetting(`shortcuts.h${level}`, `Option+Cmd+${level}`))) {
+      e.preventDefault();
+      executeEditorCommand('setHeading', { level });
+      return;
+    }
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.paragraph', 'Option+Cmd+0'))) {
+    e.preventDefault();
+    executeEditorCommand('setHeading', { level: 0 });
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.insertMdx', 'Cmd+Shift+M'))) {
+    e.preventDefault();
+    executeEditorCommand('insertMdx');
+    return;
+  }
+  if (matchesShortcut(e, getSetting('shortcuts.insertTable', 'Option+Cmd+T'))) {
     e.preventDefault();
     executeEditorCommand('insertTable');
     return;
@@ -939,11 +937,18 @@ function onBlockKeydown(e) {
   }
   if (e.key === 'Tab' && state.editorSession?.document) {
     const modelBlock = state.editorSession.document.getBlock(block.dataset.blockId);
+    if (modelBlock?.type === 'list') {
+      e.preventDefault();
+      executeEditorCommand(e.shiftKey ? 'outdentList' : 'indentList', {
+        size: Number(getSetting('editor.indentSize', 2)) || 2,
+      });
+      return;
+    }
     if (modelBlock?.type === 'code') {
       e.preventDefault();
       const selection = domSelectionToModel(qs('#block-editor'));
       const offset = selection?.anchor.offset ?? (source.textContent || '').length;
-      const spaces = e.shiftKey ? '' : '  ';
+      const spaces = e.shiftKey ? '' : ' '.repeat(getSetting('editor.indentSize', 2));
       const raw = modelBlock.raw.slice(0, offset) + spaces + modelBlock.raw.slice(offset);
       applyModelBlockUpdate(modelBlock.id, raw, offset + spaces.length, {
         source: 'input',
@@ -1126,193 +1131,30 @@ function onContainerClick(e) {
 // ============================================================
 // 首页（启动画面）
 // ============================================================
-async function renderHome() {
-  state.view = 'home';
+const homeView = createHomeView({
+  getRoot: () => $app,
+  state,
+  escapeHtml,
+  qs,
+  renderIcons: lucideIcons,
+  listRecentFiles: ListRecentFiles,
+  openDocumentFile: OpenDocumentFile,
+  readDocumentWithMeta: ReadDocumentWithMeta,
+  addRecentFile: AddRecentFile,
+  listDocuments: ListDocuments,
+  selectDocumentDir: SelectDocumentDir,
+  openWorkspace: initLibrary,
+  renderEditor,
+  startFileWatcher: path => safety.startFileWatcher(path),
+  t,
+});
 
-  // 加载最近文件
-  let recentFiles = [];
-  try { recentFiles = await ListRecentFiles(15) || []; } catch (e) {}
-
-  const recentHtml = recentFiles.length > 0 ? recentFiles.map(f => `
-    <button class="home-recent-item" data-path="${escapeHtml(f.path)}">
-      <svg data-lucide="file-text" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-      <span class="home-recent-name">${escapeHtml(f.name)}</span>
-      <span class="home-recent-path">${escapeHtml(f.path)}</span>
-    </button>
-  `).join('') : `<span class="home-recent-empty">暂无最近文件</span>`;
-
-  $app.innerHTML = `
-    <div class="home-shell">
-      <div class="window-drag-bar"></div>
-      <!-- 左侧：文档库入口面板 -->
-      <div class="home-file-panel">
-        <div class="welcome-panel">
-          <div class="welcome-panel-inner">
-            <div class="welcome-panel-hero">
-              <img src="/logo.png" alt="Markdown Writing" class="welcome-panel-logo" />
-              <h1>Markdown Writing</h1>
-              <p>轻量级 Markdown 写作工具</p>
-            </div>
-            <div class="welcome-panel-actions" id="home-actions-panel">
-              <button class="welcome-panel-btn" id="home-action-library">
-                <svg data-lucide="library" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-                <span>文档库</span>
-              </button>
-              <button class="welcome-panel-btn" id="home-action-new-doc">
-                <svg data-lucide="file-plus" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-                <span>新建文档</span>
-              </button>
-              <button class="welcome-panel-btn" id="home-action-open-file">
-                <svg data-lucide="file-up" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-                <span>打开文件</span>
-              </button>
-              <button class="welcome-panel-btn" id="home-action-open-folder">
-                <svg data-lucide="folder-open" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-                <span>打开文件夹</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧面板 -->
-      <div class="home-sidebar">
-        <div class="home-sidebar-inner">
-          <div class="home-hero">
-            <img src="/logo.png" alt="Markdown Writing" class="home-logo" />
-            <h1>Markdown Writing</h1>
-            <p>轻量级 Markdown 写作工具</p>
-          </div>
-
-          <div class="home-recent">
-            <div class="home-recent-header">
-              <svg data-lucide="clock" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>最近打开</span>
-            </div>
-            <div class="home-recent-list" id="home-recent-list">${recentHtml}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  lucideIcons();
-
-  // 文档库
-  qs('#home-action-library')?.addEventListener('click', async () => {
-    state.isDBMode = true;
-    await initLibrary();
-  });
-
-  // 新建文档（内存创建，不写DB）
-  qs('#home-action-new-doc')?.addEventListener('click', () => {
-    const title = prompt('文档标题', '无题');
-    if (!title || !title.trim()) return;
-    state.currentDoc = { id: null, name: title.trim() + '.md' };
-    state.currentContent = `# ${title.trim()}\n\n`;
-    state.currentRevision = 0;
-    state.currentHash = '';
-    state.isDirty = true;
-    state.view = 'editor';
-    renderEditor();
-  });
-
-  // 打开文件
-  qs('#home-action-open-file')?.addEventListener('click', async () => {
-    state.isDBMode = false;
-    try {
-      const path = await OpenDocumentFile();
-      if (!path) return;
-      const meta = await ReadDocumentWithMeta(path);
-      const content = meta.content;
-      const name = path.split('/').pop().replace(/\\/g, '/').split('/').pop();
-      const dir = path.substring(0, path.lastIndexOf('/')) || '/';
-      state.docDir = dir;
-      state.currentDoc = { name, path, size: content.length, modTime: '' };
-      state.currentContent = content;
-      state.currentRevision = meta.revision || 0;
-      state.currentHash = meta.contentHash || '';
-      safety.startFileWatcher(path);
-      state.view = 'editor';
-      try { AddRecentFile(path, name); } catch (e) {}
-      try {
-        state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
-      } catch (e) { state.docs = []; }
-      renderEditor();
-    } catch (e) { if (e && e.message !== 'canceled') console.error(e); }
-  });
-
-  // 打开文件夹
-  qs('#home-action-open-folder')?.addEventListener('click', async () => {
-    state.isDBMode = false;
-    try {
-      const dir = await SelectDocumentDir();
-      if (dir) { state.docDir = dir; await initLibrary(); }
-    } catch (e) { if (e && e.message !== 'canceled') console.error(e); }
-  });
-
-  // 最近文件点击
-  qs('#home-recent-list')?.addEventListener('click', async (e) => {
-    const item = e.target.closest('.home-recent-item');
-    if (!item) return;
-    const path = item.dataset.path;
-    state.isDBMode = false;
-    try {
-      const meta = await ReadDocumentWithMeta(path);
-      const content = meta.content;
-      const name = path.split('/').pop();
-      const dir = path.substring(0, path.lastIndexOf('/')) || '/';
-      state.docDir = dir;
-      state.currentDoc = { name, path, size: content.length, modTime: '' };
-      state.currentContent = content;
-      state.currentRevision = meta.revision || 0;
-      state.currentHash = meta.contentHash || '';
-      safety.startFileWatcher(path);
-      state.view = 'editor';
-      try { AddRecentFile(path, name); } catch (e) {}
-      try {
-        state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
-      } catch (e) { state.docs = []; }
-      renderEditor();
-    } catch (e) { console.error('打开最近文件失败:', e); }
-  });
+function renderHome() {
+  return homeView.render();
 }
 
 // ============================================================
-// 欢迎页（选择目录）
-// ============================================================
-function renderWelcome() {
-  $app.innerHTML = `
-    <div class="welcome-overlay" id="welcome">
-      <div class="welcome-dialog">
-        <svg data-lucide="book-open" width="56" height="56" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-        <h1>欢迎使用 Markdown Writing</h1>
-        <p>选择一个文件夹作为你的文档目录，所有文章将以 .md 文件保存在其中。</p>
-        <button class="btn-primary" id="btn-select-dir" style="height:44px;padding:0 28px;font-size:15px;">
-          <svg data-lucide="folder-open" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-          选择文档目录
-        </button>
-      </div>
-    </div>
-  `;
-  lucideIcons();
-  qs('#btn-select-dir').addEventListener('click', selectDir);
-}
-
-async function selectDir() {
-  try {
-    const dir = await SelectDocumentDir();
-    if (dir) {
-      state.docDir = dir;
-      await initLibrary();
-    }
-  } catch (e) {
-    if (e && e.message !== 'canceled') console.error(e);
-  }
-}
-
-// ============================================================
-// 文档库视图
+// 编辑器工作区初始化
 // ============================================================
 async function initLibrary() {
   state.view = 'editor';
@@ -1328,133 +1170,15 @@ async function initLibrary() {
   resetParseResult();
   safety.stopFileWatcher();
 
-  if (state.isDBMode) {
-    state.docs = await DBListDocuments() || [];
-    state.docTree = state.docs.map(d => ({
-      name: d.name,
-      path: 'db:' + d.id,
-      size: d.size,
-      modTime: d.modTime,
-      isDir: false,
-      _dbId: d.id,
-    }));
-  } else {
-    const docs = await ListDocuments(state.docDir) || [];
-    state.docs = docs.filter(d => d.name.endsWith('.md') || d.isDir);
-    try {
-      state.docTree = await ListDocumentTree(state.docDir) || [];
-    } catch (e) {
-      state.docTree = [];
-    }
+  const docs = await ListDocuments(state.docDir) || [];
+  state.docs = docs.filter(d => d.name.endsWith('.md') || d.isDir);
+  try {
+    state.docTree = await ListDocumentTree(state.docDir) || [];
+  } catch (e) {
+    state.docTree = [];
   }
   renderEditor();
   saveAppState();
-}
-
-// 为 .md 文档抓取一行摘要（去除 Markdown 标记）
-async function fetchDocPreviews() {
-  const mdDocs = state.docs.filter(d => d.name.endsWith('.md') && !d.preview).slice(0, 30);
-  let changed = false;
-  await Promise.all(mdDocs.map(async (doc) => {
-    try {
-      const raw = await ReadDocument(doc.path);
-      if (!raw) return;
-      const line = raw
-        .split('\n')
-        .map(s => s.trim())
-        .find(s => s && !s.startsWith('#') && !s.startsWith('---')) || '';
-      const clean = line
-        .replace(/^[>*\-+\d\.\)\s]+/, '')
-        .replace(/[*_`~]/g, '')
-        .trim();
-      if (clean) {
-        doc.preview = clean.length > 60 ? clean.slice(0, 60) + '…' : clean;
-        changed = true;
-      }
-    } catch (e) {
-      /* 忽略读取错误 */
-    }
-  }));
-  return changed;
-}
-
-function renderLibrary() {
-  const mdDocs = state.docs;
-  const isEmpty = mdDocs.length === 0;
-  const isDB = state.isDBMode;
-
-  let cardsHtml = '';
-  if (!isEmpty) {
-    cardsHtml = '<div class="doc-grid">';
-    for (const doc of mdDocs) {
-      const preview = escapeHtml(doc.preview || '');
-      const wordNum = doc.size > 0 ? Math.max(1, Math.round(doc.size / 3)) + ' 字' : '空';
-      const clickAttr = isDB ? `data-id="${doc.id}"` : `data-path="${escapeHtml(doc.path)}"`;
-      cardsHtml += `
-        <div class="doc-card" ${clickAttr}>
-          <div class="doc-card-summary">
-            <svg data-lucide="file-text" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-            <span class="doc-card-summary-text">${preview || '—'}</span>
-          </div>
-          <div class="doc-card-title">${escapeHtml(isDB ? doc.name.replace(/\.md$/i,'') : fileNameWithoutExt(doc.name))}</div>
-          <div class="doc-card-meta">
-            <span>${formatDate(doc.modTime)}</span>
-            <span>${wordNum}</span>
-          </div>
-        </div>
-      `;
-    }
-    cardsHtml += '</div>';
-  }
-
-  const mainContent = isEmpty ? `
-    <div class="empty-state">
-      <svg class="empty-state-icon" data-lucide="pen-line" width="72" height="72" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-      <div class="empty-state-title">开始你的第一篇文字</div>
-      <div class="empty-state-hint">点击「+ 新建文档」</div>
-    </div>
-  ` : cardsHtml;
-
-  $app.innerHTML = `
-    <div class="view-shell" id="library-view">
-      <div class="window-drag-bar"></div>
-      <header class="library-titlebar">
-        <span class="library-title">文档库</span>
-        <button class="btn-primary" id="btn-new-doc">
-          <svg data-lucide="plus" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-          新建文档
-        </button>
-      </header>
-      <main class="library-main">
-        ${mainContent}
-      </main>
-      <footer class="statusbar">
-        <span>共 ${mdDocs.length} 篇文档</span>
-        <span id="last-edited">${mdDocs.length > 0 ? '最近编辑：' + formatDate(mdDocs[0].modTime) : ''}</span>
-      </footer>
-    </div>
-  `;
-
-  lucideIcons();
-
-  // Events
-  qs('#btn-new-doc').addEventListener('click', createNewDoc);
-
-  if (!isEmpty) {
-    document.querySelectorAll('.doc-card').forEach(card => {
-      card.addEventListener('click', () => {
-        if (isDB) {
-          const id = parseInt(card.dataset.id);
-          const doc = state.docs.find(d => d.id === id);
-          if (doc) openEditor(doc);
-        } else {
-          const path = card.dataset.path;
-          const doc = state.docs.find(d => d.path === path);
-          if (doc) openEditor(doc);
-        }
-      });
-    });
-  }
 }
 
 // ============================================================
@@ -1472,21 +1196,7 @@ async function openEditor(doc) {
   state.editorSession = null;
   resetParseResult();
 
-  if (state.isDBMode && doc.id) {
-    try {
-      const result = await DBReadDocument(doc.id);
-      if (result) {
-        state.currentContent = result.content || '';
-        state.currentRevision = result.revision || 0;
-        state.currentDoc.name = result.name || doc.name;
-      } else {
-        state.currentContent = '';
-      }
-    } catch (e) {
-      state.currentContent = '';
-    }
-    safety.stopFileWatcher();
-  } else if (doc.path) {
+  if (doc.path) {
     try {
       const result = await ReadDocumentWithMeta(doc.path);
       state.currentContent = result?.content ?? await ReadDocument(doc.path);
@@ -1516,97 +1226,130 @@ async function openEditor(doc) {
 
 // 根据路径在文件树中查找文档节点
 function renderEditor() {
-  const name = state.currentDoc ? fileNameWithoutExt(state.currentDoc.name) : '未命名';
+  closeFindReplace({ restoreFocus: false });
+  disposeWorkspacePanel?.();
+  disposeWorkspacePanel = null;
+  workspacePanel = 'files';
+  currentSidebarView = 'filetree';
+  const name = state.currentDoc ? fileNameWithoutExt(state.currentDoc.name) : t('main.untitled');
   const wc = wordCount(state.currentContent || '');
   const hasDoc = !!state.currentDoc;
 
   // Build file tree (recursive from state.docTree)
   const fileTreeHtml = buildFileTreeHtml(state.docTree, 0);
+  const hasWorkspaceDirectory = Boolean(state.docDir && state.docDir !== '/demo-docs');
 
   // Build right panel content
   let rightPanelHtml;
   if (hasDoc) {
     rightPanelHtml = `
-      <header class="editor-titlebar" id="editor-view-titlebar">
-        <span class="titlebar-title" id="editor-title"><svg data-lucide="file-text" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5" class="titlebar-md-icon"></svg>${escapeHtml(name)}.md${state.isDirty ? ' *' : ''}</span>
-        <button class="sidebar-icon" id="btn-toggle-panel" title="切换侧栏">
-          <svg data-lucide="panel-left" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-        </button>
-        <button class="sidebar-icon" id="btn-history" title="版本历史">
-          <svg data-lucide="history" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-        </button>
-        <button class="sidebar-icon" id="btn-delete-doc" title="移到回收站">
-          <svg data-lucide="trash-2" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-        </button>
-        <div class="export-wrapper" id="export-wrapper">
-          <button class="sidebar-icon" id="btn-export" title="导出">
-            <svg data-lucide="download" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+      <header class="app-panel editor-titlebar" id="editor-view-titlebar">
+        <div class="editor-titlebar-document">
+          <span class="editor-document-icon">
+            <svg data-lucide="file-text" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          </span>
+          <div class="editor-document-copy">
+            <span class="editor-document-name" id="editor-title">${escapeHtml(name)}.md${state.isDirty ? ' *' : ''}</span>
+            <span class="editor-document-subtitle" id="editor-document-subtitle">${state.isDirty
+              ? t('main.dirty')
+              : state.currentDoc?.path
+                ? t('main.savedLocal')
+                : t('main.unsavedLocal')}</span>
+          </div>
+        </div>
+        <div class="editor-titlebar-actions">
+          <button class="sidebar-icon" id="btn-toggle-panel" title="${t('main.toggleSidebar')}">
+            <svg data-lucide="panel-left" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
           </button>
-          <div class="export-dropdown hidden" id="export-dropdown">
-            <button class="export-item" data-format="png"><svg data-lucide="image" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>图片 (PNG)</span></button>
-            <button class="export-item" data-format="pdf"><svg data-lucide="file-text" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>PDF</span></button>
-            <button class="export-item" data-format="docx"><svg data-lucide="file-type" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>Word (.doc)</span></button>
-            <button class="export-item" data-format="md"><svg data-lucide="file-code" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>Markdown</span></button>
-            <button class="export-item" data-format="txt"><svg data-lucide="align-left" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>纯文本</span></button>
+          <button class="sidebar-icon" id="btn-history" title="${t('main.history')}">
+            <svg data-lucide="history" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          </button>
+          <button class="sidebar-icon" id="btn-delete-doc" title="${t('main.delete')}">
+            <svg data-lucide="trash-2" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          </button>
+          <div class="export-wrapper" id="export-wrapper">
+            <button class="sidebar-icon" id="btn-export" title="${t('main.export')}">
+              <svg data-lucide="download" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+            </button>
+            <div class="export-dropdown hidden" id="export-dropdown">
+              <button class="export-item" data-format="png"><svg data-lucide="image" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>${t('main.export.png')}</span></button>
+              <button class="export-item" data-format="pdf"><svg data-lucide="file-text" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>${t('main.export.pdf')}</span></button>
+              <button class="export-item" data-format="docx"><svg data-lucide="file-type" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>${t('main.export.docx')}</span></button>
+              <button class="export-item" data-format="md"><svg data-lucide="file-code" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>${t('main.export.md')}</span></button>
+              <button class="export-item" data-format="txt"><svg data-lucide="align-left" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg><span>${t('main.export.txt')}</span></button>
+            </div>
           </div>
         </div>
       </header>
 
       <div class="editor-content" id="editor-scroll">
-        <div class="editor-paper" id="editor-paper">
+        <div class="app-panel editor-paper" id="editor-paper">
           <div id="block-editor">
             ${buildBlockEditorHtml(state.currentContent || '')}
           </div>
         </div>
-        <textarea class="editor-source" id="editor-source" spellcheck="false">${escapeHtml(state.currentContent || '')}</textarea>
+        <textarea class="app-panel editor-source" id="editor-source" spellcheck="false">${escapeHtml(state.currentContent || '')}</textarea>
       </div>
 
-      <footer class="statusbar">
+      <footer class="app-panel editor-statusbar statusbar">
         <div class="statusbar-left">
           <span id="mode-indicator">
             <svg data-lucide="${state.sourceMode ? 'code' : 'eye'}" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-            <span>${state.sourceMode ? '源码' : '预览'}</span>
+            <span>${state.sourceMode ? t('main.mode.source') : t('main.mode.preview')}</span>
           </span>
         </div>
         <div class="statusbar-right">
-          <span id="line-count">行数：${String(state.currentContent || '').split('\n').length}</span>
+          <span id="line-count">${t('main.lines', { count: String(state.currentContent || '').split('\n').length })}</span>
           <span class="statusbar-divider">|</span>
-          <span id="word-count">字数：${wc}</span>
+          <span id="word-count">${t('main.words', { count: wc })}</span>
         </div>
       </footer>`;
   } else {
     // 无文档时的欢迎面板
     rightPanelHtml = `
-      <div class="welcome-panel" id="welcome-panel">
-        <div class="welcome-panel-inner">
-          <div class="welcome-panel-hero">
-            <img src="/logo.png" alt="Markdown Writing" class="welcome-panel-logo" />
-            <h1>Markdown Writing</h1>
-            <p>轻量级 Markdown 写作工具</p>
-          </div>
-          <div class="welcome-panel-actions" id="welcome-panel-actions">
-            <button class="welcome-panel-btn" id="wp-new-doc">
-              <svg data-lucide="file-plus" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>新建文档</span>
+      <div class="app-panel welcome-panel" id="welcome-panel">
+        <div class="welcome-panel-inner welcome-dashboard">
+          ${brandHeroHtml()}
+          <div class="welcome-action-grid" id="welcome-panel-actions">
+            <button class="welcome-dashboard-action welcome-dashboard-action-primary" id="wp-new-doc">
+              <span class="welcome-dashboard-icon">
+                <svg data-lucide="file-plus" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+              </span>
+              <span class="welcome-dashboard-copy">
+                <strong>${t('main.newDoc')}</strong>
+                <small>${t('main.newDocHint')}</small>
+              </span>
             </button>
-            <button class="welcome-panel-btn" id="wp-open-file">
-              <svg data-lucide="file-up" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>打开文件</span>
+            <button class="welcome-dashboard-action" id="wp-open-file">
+              <span class="welcome-dashboard-icon">
+                <svg data-lucide="file-up" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+              </span>
+              <span class="welcome-dashboard-copy">
+                <strong>${t('main.openFile')}</strong>
+                <small>${t('main.openFileHint')}</small>
+              </span>
             </button>
-            <button class="welcome-panel-btn" id="wp-open-folder">
+            <button class="welcome-folder-action" id="wp-open-folder">
               <svg data-lucide="folder-open" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>打开文件夹</span>
+              <span>
+                <strong>${t('main.openFolder')}</strong>
+                <small>${t('main.openFolderHint')}</small>
+              </span>
+              <svg class="welcome-folder-arrow" data-lucide="chevron-right" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
             </button>
           </div>
-          <div class="welcome-panel-recent" id="welcome-panel-recent-container">
-            <div class="welcome-panel-recent-header">
-              <svg data-lucide="clock" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>最近打开</span>
+          <section class="welcome-recent-panel" id="welcome-panel-recent-container">
+            <div class="welcome-recent-panel-header">
+              <div>
+                <span class="app-panel-kicker">RECENT</span>
+                <h2>${t('main.recent')}</h2>
+              </div>
+              <svg data-lucide="clock" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
             </div>
             <div class="welcome-panel-recent-list" id="welcome-panel-recent-list">
-              <span class="welcome-panel-recent-empty">加载中...</span>
+              <span class="welcome-panel-recent-empty">${t('main.loading')}</span>
             </div>
-          </div>
+          </section>
         </div>
       </div>`;
   }
@@ -1616,58 +1359,66 @@ function renderEditor() {
       <div class="window-drag-bar"></div>
       <div class="editor-body">
         <!-- 文件树侧栏（含独立顶部标题栏） -->
-        <aside class="file-tree ${state.sidebarCollapsed ? 'collapsed' : ''}" id="file-tree-container" style="width:${state.sidebarCollapsed ? 0 : state.sidebarWidth}px;">
+        <aside class="app-panel editor-sidebar-panel file-tree ${state.sidebarCollapsed ? 'collapsed' : ''} ${hasWorkspaceDirectory ? '' : 'workspace-empty'}" id="file-tree-container" style="width:${state.sidebarCollapsed ? 0 : state.sidebarWidth}px;">
           <header class="sidebar-titlebar with-traffic-lights">
             <div class="sidebar-header">
-              <span class="sidebar-title" id="sidebar-title">Markdown Writing</span>
+              <span class="sidebar-app-name" id="sidebar-title"></span>
             </div>
           </header>
-          <div class="sidebar-toolbar">
-            <button class="sidebar-icon" id="btn-back" title="返回文档库">
-              <svg data-lucide="library" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          <nav class="workspace-nav workspace-nav-primary" aria-label="文档导航">
+            <button class="workspace-nav-item active" type="button" data-workspace-nav="files">
+              <svg data-lucide="folder" width="15" height="15"></svg>
+              <span data-i18n="main.nav.files">${t('main.nav.files')}</span>
             </button>
-            <span class="sidebar-toolbar-divider">｜</span>
-            <div class="sidebar-toolbar-right">
-              <button class="sidebar-icon" id="sidebar-toggle" title="切换视图">
-                <svg data-lucide="folder" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+            <button class="workspace-nav-item" type="button" data-workspace-nav="outline">
+              <svg data-lucide="list" width="15" height="15"></svg>
+              <span data-i18n="main.nav.outline">${t('main.nav.outline')}</span>
+            </button>
+          </nav>
+          <div class="sidebar-document-context" id="sidebar-document-context">
+            <div class="sidebar-context-header">
+              <div class="sidebar-context-title">
+                <span class="sidebar-section-kicker" id="sidebar-section-kicker">FILES</span>
+                <span class="sidebar-section-title" id="sidebar-section-title" data-i18n="main.files">${t('main.files')}</span>
+              </div>
+              <button class="sidebar-icon" id="sidebar-search-btn" title="${t('main.search')}" data-i18n-title="main.search">
+                <svg data-lucide="search" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
               </button>
-              <button class="sidebar-icon" id="sidebar-search-btn" title="搜索">
-                <svg data-lucide="search" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+              <button class="sidebar-icon" id="sidebar-new-file-btn" title="${t('fileTree.newFile')}" data-i18n-title="fileTree.newFile">
+                <svg data-lucide="file-plus" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
               </button>
             </div>
+            <div class="sidebar-search hidden" id="sidebar-search">
+              <svg data-lucide="search" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+              <input type="text" class="sidebar-search-input" id="sidebar-search-input" placeholder="${t('main.searchFiles')}" data-i18n-placeholder="main.searchFiles" />
+            </div>
+            <nav class="file-tree-nav" id="file-tree-nav">
+              ${fileTreeHtml || `<div class="sidebar-empty">${t('main.openFolder')}</div>`}
+            </nav>
+            <div class="file-tree-outline hidden" id="file-tree-outline">
+              <div class="outline-list" id="outline-list"></div>
+            </div>
           </div>
-          <div class="sidebar-section-title" id="sidebar-section-title">文件</div>
-          <div class="sidebar-search hidden" id="sidebar-search">
-            <svg data-lucide="search" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-            <input type="text" class="sidebar-search-input" id="sidebar-search-input" placeholder="搜索文件" />
-          </div>
-          <nav class="file-tree-nav" id="file-tree-nav">
-            ${fileTreeHtml || '<div class="sidebar-empty">打开文件夹</div>'}
+          <nav class="workspace-nav workspace-nav-footer" aria-label="应用导航">
+            <button class="workspace-nav-item" type="button" data-workspace-nav="settings">
+              <svg data-lucide="settings" width="15" height="15"></svg>
+              <span data-i18n="main.nav.settings">${t('main.nav.settings')}</span>
+            </button>
           </nav>
-          <div class="file-tree-outline hidden" id="file-tree-outline">
-            <div class="outline-list" id="outline-list"></div>
-          </div>
-          <div class="sidebar-footer">
-            <button class="sidebar-footer-btn" id="btn-settings" title="设置">
-              <svg data-lucide="settings" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>设置</span>
-            </button>
-            <button class="sidebar-footer-btn" id="btn-recycle-bin" title="回收站">
-              <svg data-lucide="trash-2" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-              <span>回收站</span>
-            </button>
-          </div>
-          <div class="sidebar-resizer" id="sidebar-resizer" title="拖动调整宽度"></div>
+          <div class="sidebar-resizer" id="sidebar-resizer" title="${t('main.dragSidebar')}"></div>
         </aside>
 
         <!-- 折叠后：左侧边缘悬浮展开按钮 -->
-        <button class="sidebar-reopen ${state.sidebarCollapsed ? 'visible' : ''}" id="sidebar-reopen" title="展开侧边栏">
+        <button class="sidebar-reopen ${state.sidebarCollapsed ? 'visible' : ''}" id="sidebar-reopen" title="${t('main.expandSidebar')}">
           <svg data-lucide="chevron-right" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.8"></svg>
         </button>
 
         <!-- 写作区 -->
         <div class="editor-writing-area">
-          ${rightPanelHtml}
+          <div class="editor-document-view" id="editor-document-view">
+            ${rightPanelHtml}
+          </div>
+          <div class="editor-workspace-host hidden" id="editor-workspace-host"></div>
         </div>
       </div>
     </div>
@@ -1675,6 +1426,7 @@ function renderEditor() {
 
   lucideIcons();
   hookEditorEvents();
+  updateExportPluginState();
 
   if (hasDoc) {
     hookBlockEvents();
@@ -1747,11 +1499,17 @@ async function loadWelcomePanelRecentFiles() {
         </button>
       `).join('');
     } else {
-      listEl.innerHTML = '<span class="welcome-panel-recent-empty">暂无最近文件</span>';
+      listEl.innerHTML = `
+        <div class="welcome-recent-empty">
+          <svg data-lucide="file-text" width="18" height="18" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          <strong>${t('main.noRecent')}</strong>
+          <span>${t('main.noRecentHint')}</span>
+        </div>
+      `;
     }
     lucideIcons();
   } catch (e) {
-    listEl.innerHTML = '<span class="welcome-panel-recent-empty">暂无最近文件</span>';
+    listEl.innerHTML = `<span class="welcome-panel-recent-empty">${t('main.noRecent')}</span>`;
   }
 }
 
@@ -1759,7 +1517,7 @@ function hookWelcomePanelEvents() {
   const btn = qs('#wp-new-doc');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    state.currentDoc = { id: null, name: '未命名.md' };
+    state.currentDoc = { id: null, name: `${t('main.untitled')}.md` };
     state.currentContent = '';
     state.currentRevision = 0;
     state.currentHash = '';
@@ -1770,7 +1528,6 @@ function hookWelcomePanelEvents() {
   const btnFile = qs('#wp-open-file');
   if (btnFile) {
     btnFile.addEventListener('click', async () => {
-      state.isDBMode = false;
       try {
         const path = await OpenDocumentFile();
         if (!path) return;
@@ -1793,7 +1550,6 @@ function hookWelcomePanelEvents() {
   const btnFolder = qs('#wp-open-folder');
   if (btnFolder) {
     btnFolder.addEventListener('click', async () => {
-      state.isDBMode = false;
       try {
         const dir = await SelectDocumentDir();
         if (dir) {
@@ -1811,7 +1567,6 @@ function hookWelcomePanelEvents() {
     const item = e.target.closest('.welcome-panel-recent-item');
     if (!item) return;
     const path = item.dataset.path;
-    state.isDBMode = false;
     try {
       const meta = await ReadDocumentWithMeta(path);
       const content = meta.content;
@@ -1837,8 +1592,11 @@ function hookWelcomePanelEvents() {
 // 编辑器事件绑定
 // ============================================================
 let autoSaveTimer = null;
+let findReplaceSession = null;
 
 let currentSidebarView = 'filetree';
+let workspacePanel = 'files';
+let disposeWorkspacePanel = null;
 let editorDocumentEventsBound = false;
 
 function toggleSidebarPanel() {
@@ -1854,37 +1612,425 @@ function toggleSidebarPanel() {
   }
 }
 
-function toggleSidebarView() {
-  currentSidebarView = currentSidebarView === 'filetree' ? 'outline' : 'filetree';
-  updateSidebarView();
-}
-
 function updateSidebarView() {
   const tree = qs('#file-tree-nav');
   const outline = qs('#file-tree-outline');
-  const toggle = qs('#sidebar-toggle');
   const sectionTitle = qs('#sidebar-section-title');
+  const sectionKicker = qs('#sidebar-section-kicker');
   const searchBtn = qs('#sidebar-search-btn');
+  const newFileBtn = qs('#sidebar-new-file-btn');
 
   if (currentSidebarView === 'filetree') {
     tree?.classList.remove('hidden');
     outline?.classList.add('hidden');
     searchBtn?.classList.remove('icon-placeholder');
-    if (toggle) toggle.innerHTML = '<svg data-lucide="folder" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>';
-    if (sectionTitle) sectionTitle.textContent = '文件';
-    lucideIcons();
+    newFileBtn?.classList.remove('hidden');
+    if (sectionKicker) sectionKicker.textContent = 'FILES';
+    if (sectionTitle) sectionTitle.textContent = t('main.files');
   } else {
     tree?.classList.add('hidden');
     outline?.classList.remove('hidden');
     searchBtn?.classList.add('icon-placeholder');
-    if (toggle) toggle.innerHTML = '<svg data-lucide="list" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>';
-    if (sectionTitle) sectionTitle.textContent = '大纲';
-    lucideIcons();
+    newFileBtn?.classList.add('hidden');
+    if (sectionKicker) sectionKicker.textContent = 'OUTLINE';
+    if (sectionTitle) sectionTitle.textContent = t('main.outline');
     generateOutline();
   }
   // Hide search when switching views
   qs('#sidebar-search')?.classList.add('hidden');
-  qs('#sidebar-search-input').value = '';
+  const searchInput = qs('#sidebar-search-input');
+  if (searchInput) searchInput.value = '';
+}
+
+function setWorkspacePanel(panel) {
+  disposeWorkspacePanel?.();
+  disposeWorkspacePanel = null;
+  workspacePanel = panel;
+  document.querySelectorAll('[data-workspace-nav]').forEach(item => {
+    item.classList.toggle('active', item.dataset.workspaceNav === panel);
+  });
+
+  const documentContext = qs('#sidebar-document-context');
+  const documentView = qs('#editor-document-view');
+  const workspaceHost = qs('#editor-workspace-host');
+  if (!documentView || !workspaceHost) return;
+
+  if (panel === 'files' || panel === 'outline') {
+    currentSidebarView = panel === 'files' ? 'filetree' : 'outline';
+    documentContext?.classList.remove('hidden');
+    documentView.classList.remove('hidden');
+    workspaceHost.classList.add('hidden');
+    workspaceHost.innerHTML = '';
+    updateSidebarView();
+    return;
+  }
+
+  documentContext?.classList.add('hidden');
+  documentView.classList.add('hidden');
+  workspaceHost.classList.remove('hidden');
+  workspaceHost.innerHTML = '';
+
+  if (panel === 'settings') {
+    void openSettingsModal({
+      container: workspaceHost,
+      onClose: () => {
+        setWorkspacePanel('files');
+        renderEditor();
+      },
+    }).then(handle => {
+      if (workspacePanel === 'settings') {
+        disposeWorkspacePanel = () => handle?.dispose?.();
+      }
+    });
+    return;
+  }
+
+}
+
+function ensureFindReplacePanel() {
+  const host = qs('#editor-document-view');
+  if (!host) return null;
+  let panel = qs('#find-replace-panel');
+  if (panel) return panel;
+
+  host.insertAdjacentHTML('beforeend', `
+    <section class="find-replace-panel" id="find-replace-panel" aria-label="${t('find.query')} / ${t('find.replace')}">
+      <div class="find-replace-row">
+        <button class="find-replace-case" type="button" data-find-case title="${t('find.case')}" aria-pressed="false">Aa</button>
+        <input class="find-replace-input" data-find-query type="text" placeholder="${t('find.query')}" autocomplete="off" spellcheck="false">
+        <span class="find-replace-count" data-find-count>0 / 0</span>
+        <button class="find-replace-icon" type="button" data-find-prev title="${t('find.previous')}" aria-label="${t('find.previous')}">
+          <svg data-lucide="chevron-up" width="15" height="15"></svg>
+        </button>
+        <button class="find-replace-icon" type="button" data-find-next title="${t('find.next')}" aria-label="${t('find.next')}">
+          <svg data-lucide="chevron-down" width="15" height="15"></svg>
+        </button>
+        <button class="find-replace-icon" type="button" data-find-close title="${t('common.close')}" aria-label="${t('common.close')}">
+          <svg data-lucide="x" width="15" height="15"></svg>
+        </button>
+      </div>
+      <div class="find-replace-row find-replace-replace-row hidden" data-find-replace-controls>
+        <input class="find-replace-input" data-find-replacement type="text" placeholder="${t('find.replacement')}" autocomplete="off" spellcheck="false">
+        <button class="find-replace-action" type="button" data-find-replace>${t('find.replace')}</button>
+        <button class="find-replace-action" type="button" data-find-replace-all>${t('find.replaceAll')}</button>
+      </div>
+    </section>
+  `);
+
+  panel = qs('#find-replace-panel');
+  panel.addEventListener('input', event => {
+    if (!findReplaceSession) return;
+    if (event.target.matches('[data-find-query]')) {
+      findReplaceSession.query = event.target.value;
+      refreshFindReplaceMatches({ resetIndex: true });
+      return;
+    }
+    if (event.target.matches('[data-find-replacement]')) {
+      findReplaceSession.replacement = event.target.value;
+    }
+  });
+
+  panel.addEventListener('click', event => {
+    if (event.target.closest('[data-find-close]')) {
+      closeFindReplace();
+      return;
+    }
+    if (event.target.closest('[data-find-case]')) {
+      if (!findReplaceSession) return;
+      findReplaceSession.caseSensitive = !findReplaceSession.caseSensitive;
+      refreshFindReplaceMatches({ resetIndex: true });
+      return;
+    }
+    if (event.target.closest('[data-find-prev]')) {
+      moveFindMatch(-1);
+      return;
+    }
+    if (event.target.closest('[data-find-next]')) {
+      moveFindMatch(1);
+      return;
+    }
+    if (event.target.closest('[data-find-replace-all]')) {
+      replaceAllFindMatches();
+      return;
+    }
+    if (event.target.closest('[data-find-replace]')) {
+      replaceCurrentFindMatch();
+    }
+  });
+
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeFindReplace();
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if ((event.metaKey || event.ctrlKey) && findReplaceSession?.replaceMode) {
+      replaceAllFindMatches();
+    } else if (event.altKey && findReplaceSession?.replaceMode) {
+      replaceCurrentFindMatch();
+    } else {
+      moveFindMatch(event.shiftKey ? -1 : 1);
+    }
+  });
+
+  lucideIcons();
+  return panel;
+}
+
+function openFindReplace({ replace = false } = {}) {
+  if (!state.currentDoc || state.view !== 'editor') return;
+  const panel = ensureFindReplacePanel();
+  if (!panel) return;
+
+  if (!findReplaceSession) {
+    findReplaceSession = {
+      query: '',
+      replacement: '',
+      caseSensitive: false,
+      matches: [],
+      index: 0,
+      replaceMode: replace,
+    };
+  } else {
+    findReplaceSession.replaceMode = replace;
+  }
+
+  panel.classList.remove('hidden');
+  const replaceControls = panel.querySelector('[data-find-replace-controls]');
+  replaceControls?.classList.toggle('hidden', !findReplaceSession.replaceMode);
+  refreshFindReplaceMatches({ resetIndex: true });
+
+  const focusTarget = findReplaceSession.replaceMode
+    ? panel.querySelector('[data-find-replacement]')
+    : panel.querySelector('[data-find-query]');
+  focusTarget?.focus();
+  focusTarget?.select();
+}
+
+function closeFindReplace({ restoreFocus = true } = {}) {
+  const panel = qs('#find-replace-panel');
+  panel?.remove();
+  findReplaceSession = null;
+  if (!restoreFocus) return;
+  if (state.sourceMode) {
+    qs('#editor-source')?.focus();
+    return;
+  }
+  const activeBlock = qs('#block-editor .block.active .block-source');
+  if (activeBlock instanceof HTMLElement) activeBlock.focus();
+}
+
+function refreshFindReplaceMatches({ resetIndex = false } = {}) {
+  if (!findReplaceSession) return;
+  const { query, caseSensitive } = findReplaceSession;
+  const matches = [];
+
+  if (query) {
+    if (state.sourceMode) {
+      const source = qs('#editor-source');
+      for (const match of findTextMatches(source?.value || '', query, { caseSensitive })) {
+        matches.push({ ...match, kind: 'source' });
+      }
+    } else if (state.editorSession?.document) {
+      for (const block of state.editorSession.document.blocks) {
+        for (const match of findTextMatches(block.raw, query, { caseSensitive })) {
+          matches.push({ ...match, kind: 'block', blockId: block.id });
+        }
+      }
+    }
+  }
+
+  findReplaceSession.matches = matches;
+  if (resetIndex) findReplaceSession.index = 0;
+  if (matches.length === 0) findReplaceSession.index = 0;
+  if (findReplaceSession.index >= matches.length) findReplaceSession.index = matches.length - 1;
+  updateFindReplaceUi();
+}
+
+function updateFindReplaceUi() {
+  const panel = qs('#find-replace-panel');
+  if (!panel || !findReplaceSession) return;
+  const count = panel.querySelector('[data-find-count]');
+  const caseButton = panel.querySelector('[data-find-case]');
+  const hasMatches = findReplaceSession.matches.length > 0;
+  const position = hasMatches ? findReplaceSession.index + 1 : 0;
+  if (count) count.textContent = `${position} / ${findReplaceSession.matches.length}`;
+  caseButton?.classList.toggle('active', findReplaceSession.caseSensitive);
+  caseButton?.setAttribute('aria-pressed', String(findReplaceSession.caseSensitive));
+  panel.querySelectorAll('[data-find-prev], [data-find-next], [data-find-replace], [data-find-replace-all]')
+    .forEach(button => { button.disabled = !hasMatches; });
+}
+
+function moveFindMatch(direction) {
+  if (!findReplaceSession) return;
+  refreshFindReplaceMatches();
+  const matches = findReplaceSession.matches;
+  if (!matches.length) return;
+  findReplaceSession.index = (findReplaceSession.index + direction + matches.length) % matches.length;
+  updateFindReplaceUi();
+  focusFindMatch(matches[findReplaceSession.index]);
+}
+
+function focusFindMatch(match) {
+  if (!match) return;
+  if (match.kind === 'source' || state.sourceMode) {
+    const source = qs('#editor-source');
+    if (!source) return;
+    source.focus();
+    source.setSelectionRange(match.start, match.end);
+    return;
+  }
+
+  const root = qs('#block-editor');
+  if (!root) return;
+  const block = [...root.querySelectorAll('.block')]
+    .find(element => element.dataset.blockId === match.blockId);
+  if (!block) return;
+  const index = Number(block.dataset.blockIndex);
+  if (Number.isInteger(index) && index !== activeBlockIndex) activateBlock(index);
+  const source = block.querySelector('.block-source');
+  if (!source) return;
+  source.focus();
+  setContentEditableSelection(source, match.start, match.end);
+  source.scrollIntoView({ block: 'center' });
+}
+
+function setContentEditableSelection(root, start, end) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let offset = 0;
+  let startNode = null;
+  let startOffset = 0;
+  let endNode = null;
+  let endOffset = 0;
+
+  while (node) {
+    const length = node.textContent?.length || 0;
+    if (!startNode && start <= offset + length) {
+      startNode = node;
+      startOffset = Math.max(0, start - offset);
+    }
+    if (!endNode && end <= offset + length) {
+      endNode = node;
+      endOffset = Math.max(0, end - offset);
+      break;
+    }
+    offset += length;
+    node = walker.nextNode();
+  }
+
+  if (!startNode || !endNode) {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  } else {
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function replaceCurrentFindMatch() {
+  if (!findReplaceSession) return;
+  refreshFindReplaceMatches();
+  const match = findReplaceSession.matches[findReplaceSession.index];
+  if (!match) return;
+  const replacement = findReplaceSession.replacement;
+
+  if (match.kind === 'source' || state.sourceMode) {
+    const source = qs('#editor-source');
+    if (!source) return;
+    source.value = replaceTextRange(source.value, match, replacement);
+    state.currentContent = source.value;
+    state.isDirty = true;
+    autoResizeTextarea(source);
+    updateWordCount();
+    scheduleAutoSave();
+    refreshFindReplaceMatches();
+    if (findReplaceSession.matches.length) {
+      setTimeout(() => focusFindMatch(findReplaceSession.matches[findReplaceSession.index]), 0);
+    }
+    return;
+  }
+
+  const session = state.editorSession;
+  const block = session?.document?.getBlock(match.blockId);
+  if (!session || !block) return;
+  const nextRaw = replaceTextRange(block.raw, match, replacement);
+  const transaction = session.createTransaction({ source: 'find-replace' }).replace(block.id, nextRaw);
+  const result = session.apply(transaction);
+  const caret = match.start + replacement.length;
+  session.selection = createSelection(
+    createPosition(block.id, caret),
+    createPosition(block.id, caret),
+  );
+  state.selection = session.selection;
+  state.currentContent = serializeDocument(result.document);
+  state.isDirty = true;
+  syncIncrementalBlocks(result.changedBlockIds);
+  updateWordCount();
+  scheduleAutoSave();
+  refreshFindReplaceMatches();
+  if (findReplaceSession.matches.length) {
+    const nextIndex = Math.min(findReplaceSession.index, findReplaceSession.matches.length - 1);
+    findReplaceSession.index = nextIndex;
+    updateFindReplaceUi();
+    setTimeout(() => focusFindMatch(findReplaceSession.matches[nextIndex]), 0);
+  }
+}
+
+function replaceAllFindMatches() {
+  if (!findReplaceSession) return;
+  refreshFindReplaceMatches();
+  const { query, replacement, caseSensitive, matches } = findReplaceSession;
+  if (!query || !matches.length) return;
+
+  if (state.sourceMode) {
+    const source = qs('#editor-source');
+    if (!source) return;
+    const result = replaceAllText(source.value, query, replacement, { caseSensitive });
+    if (!result.count) return;
+    source.value = result.text;
+    state.currentContent = source.value;
+    state.isDirty = true;
+    autoResizeTextarea(source);
+    updateWordCount();
+    scheduleAutoSave();
+    refreshFindReplaceMatches({ resetIndex: true });
+    return;
+  }
+
+  const session = state.editorSession;
+  if (!session) return;
+  const grouped = new Map();
+  for (const match of matches) {
+    if (!grouped.has(match.blockId)) grouped.set(match.blockId, []);
+    grouped.get(match.blockId).push(match);
+  }
+
+  const transaction = session.createTransaction({ source: 'find-replace' });
+  for (const [blockId, blockMatches] of grouped) {
+    const block = session.document.getBlock(blockId);
+    if (!block) continue;
+    let raw = block.raw;
+    for (let index = blockMatches.length - 1; index >= 0; index -= 1) {
+      raw = replaceTextRange(raw, blockMatches[index], replacement);
+    }
+    transaction.replace(blockId, raw);
+  }
+
+  const result = session.apply(transaction);
+  state.currentContent = serializeDocument(result.document);
+  state.isDirty = true;
+  syncIncrementalBlocks(result.changedBlockIds);
+  updateWordCount();
+  scheduleAutoSave();
+  refreshFindReplaceMatches({ resetIndex: true });
 }
 
 let searchVisible = false;
@@ -1913,34 +2059,21 @@ function generateOutline() {
   const listDiv = qs('#outline-list');
   if (!listDiv) return;
 
-  const headingBlocks = document.querySelectorAll('#block-editor .block-heading');
-  if (headingBlocks.length === 0) {
-    listDiv.innerHTML = '<div class="sidebar-empty">当前文档没有标题。</div>';
+  const collapsedKeys = new Set(
+    [...listDiv.querySelectorAll('.outline-node.collapsed')]
+      .map(node => node.dataset.outlineKey),
+  );
+  const headings = state.sourceMode
+    ? headingsFromMarkdown(qs('#editor-source')?.value || state.currentContent)
+    : headingsFromDocument(state.editorSession?.document);
+
+  if (headings.length === 0) {
+    listDiv.innerHTML = `<div class="sidebar-empty">${t('main.noHeadings')}</div>`;
     return;
   }
 
-  const levelColors = {
-    1: '#5c89f2',
-    2: '#4caf80',
-    3: '#7bc4d4',
-    4: '#a8c4d4'
-  };
-
-  let html = '';
-  headingBlocks.forEach(block => {
-    const classList = [...block.classList];
-    const levelClass = classList.find(c => c.startsWith('block-h'));
-    const level = levelClass ? parseInt(levelClass.replace('block-h', '')) : 1;
-    const source = block.querySelector('.block-source');
-    const text = source ? (source.textContent || '').replace(/^#{1,6}\s+/, '') : '';
-    const indent = (level - 1) * 16;
-    const color = levelColors[level] || levelColors[4];
-    html += '<div class="outline-item" data-block-index="' + (block.dataset.blockIndex || '0') + '" style="padding-left:' + (8 + indent) + 'px;">';
-    html += '<span class="outline-badge" style="background:' + color + ';">H' + level + '</span>';
-    html += '<span class="outline-text">' + escapeHtml(text) + '</span>';
-    html += '</div>';
-  });
-  listDiv.innerHTML = html;
+  const tree = buildOutlineTree(headings);
+  listDiv.innerHTML = `<div class="outline-tree">${renderOutlineTree(tree, { collapsedKeys })}</div>`;
 }
 
 function hookSidebarResize() {
@@ -2008,9 +2141,10 @@ function hookSidebarResize() {
 }
 
 function hookEditorEvents() {
-  // 侧栏视图切换
-  qs('#sidebar-toggle')?.addEventListener('click', toggleSidebarView);
-  qs('#sidebar-title')?.addEventListener('click', toggleSidebarView);
+  // 左侧导航切换
+  document.querySelectorAll('[data-workspace-nav]').forEach(item => {
+    item.addEventListener('click', () => setWorkspacePanel(item.dataset.workspaceNav));
+  });
 
   // 面板开关（折叠/展开文件树侧栏）
   qs('#btn-toggle-panel')?.addEventListener('click', toggleSidebarPanel);
@@ -2028,7 +2162,7 @@ function hookEditorEvents() {
     if (!item) return;
     const format = item.dataset.format;
     qs('#export-dropdown')?.classList.add('hidden');
-    handleExport(format);
+    handleExportWithPlugins(format);
     lucideIcons();
   });
 
@@ -2051,8 +2185,23 @@ function hookEditorEvents() {
 
   // 大纲定位
   qs('#outline-list')?.addEventListener('click', (e) => {
+    const toggle = e.target.closest('[data-outline-toggle]');
+    if (toggle) {
+      toggle.closest('.outline-node')?.classList.toggle('collapsed');
+      return;
+    }
+
     const item = e.target.closest('.outline-item');
     if (!item) return;
+    if (state.sourceMode) {
+      const offset = Number(item.dataset.sourceOffset);
+      const sourceEditor = qs('#editor-source');
+      if (!Number.isNaN(offset) && sourceEditor) {
+        sourceEditor.focus();
+        sourceEditor.setSelectionRange(offset, offset);
+      }
+      return;
+    }
     const index = parseInt(item.dataset.blockIndex || '', 10);
     if (Number.isNaN(index)) return;
     activateBlock(index);
@@ -2065,26 +2214,9 @@ function hookEditorEvents() {
   // 侧边栏：宽度拖拽 + 自动折叠 + 展开
   hookSidebarResize();
 
-  // 设置按钮
-  qs('#btn-settings')?.addEventListener('click', openSettingsModal);
-  qs('#btn-recycle-bin')?.addEventListener('click', () => safety.openRecycleBin());
+  // 文档操作
   qs('#btn-history')?.addEventListener('click', () => safety.openHistory());
   qs('#btn-delete-doc')?.addEventListener('click', deleteCurrentDocument);
-
-  // 返回文档库
-  qs('#btn-back')?.addEventListener('click', async () => {
-    await saveCurrentDoc();
-    state.currentDoc = null;
-    state.currentContent = '';
-    try {
-      await initLibrary();
-    } catch (err) {
-      console.error(err);
-      state.view = 'library';
-      renderWelcome();
-    }
-  });
-
 
   // === 源码编辑器事件 ===
   const sourceEditor = qs('#editor-source');
@@ -2094,12 +2226,12 @@ function hookEditorEvents() {
       state.currentContent = sourceEditor.value;
       autoResizeTextarea(sourceEditor);
       updateWordCount();
+      if (currentSidebarView === 'outline') generateOutline();
       scheduleAutoSave();
     });
 
     sourceEditor.addEventListener('keydown', (e) => {
-      const isCmd = e.metaKey || e.ctrlKey;
-      if (isCmd && e.key === '/') {
+      if (matchesShortcut(e, getSetting('shortcuts.toggleSource', 'Cmd/Ctrl+/'))) {
         e.preventDefault();
         toggleSourceMode();
         return;
@@ -2136,7 +2268,7 @@ function toggleSourceMode() {
     autoResizeTextarea(sourceEditor);
     sourceEditor.focus();
     if (modeIndicator) {
-      modeIndicator.innerHTML = '<svg data-lucide="code" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>源码</span>';
+      modeIndicator.innerHTML = `<svg data-lucide="code" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>${t('main.mode.source')}</span>`;
       lucideIcons();
     }
   } else {
@@ -2151,13 +2283,20 @@ function toggleSourceMode() {
       blockEditor.innerHTML = buildBlockEditorHtml(md);
       hookBlockEvents();
     }
+    state.selection = null;
+    state.selectionIndex = 0;
+    const parseResult = getLastParseResult();
+    state.editorSession = parseResult?.document
+      ? createEditorSession(parseResult.document, null)
+      : null;
     restoreBlockSelection();
     if (modeIndicator) {
-      modeIndicator.innerHTML = '<svg data-lucide="eye" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>预览</span>';
+      modeIndicator.innerHTML = `<svg data-lucide="eye" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>${t('main.mode.preview')}</span>`;
       lucideIcons();
     }
     updateWordCount();
   }
+  refreshFindReplaceMatches();
 }
 
 function handleEditorKeydown(e) {
@@ -2204,10 +2343,10 @@ function updateWordCount() {
   }
   const wc = wordCount(md);
   const wcEl = qs('#word-count');
-  if (wcEl) wcEl.textContent = '字数：' + wc;
+  if (wcEl) wcEl.textContent = t('main.words', { count: wc });
   const lines = (md || '').split('\n').length;
   const lcEl = qs('#line-count');
-  if (lcEl) lcEl.textContent = '行数：' + lines;
+  if (lcEl) lcEl.textContent = t('main.lines', { count: lines });
 }
 
 function syncIncrementalBlocks(changedBlockIds) {
@@ -2252,6 +2391,7 @@ function syncIncrementalBlocks(changedBlockIds) {
   }
   hookBlockEvents();
   restoreBlockSelection();
+  if (currentSidebarView === 'outline') generateOutline();
 }
 
 function applyHistoryResult(result, action = 'history') {
@@ -2282,11 +2422,12 @@ function redoEditor() {
   applyHistoryResult(state.editorSession?.redo(), 'redo');
 }
 
-function executeEditorCommand(name) {
+function executeEditorCommand(name, args = {}) {
   if (!state.editorSession) return null;
   captureBlockSelection();
   const result = editorCommands.execute(name, {
     session: state.editorSession,
+    ...args,
   });
   if (!result) return null;
   state.currentContent = serializeDocument(result.document);
@@ -2318,6 +2459,7 @@ function captureBlockSelection() {
       enrich(selection.anchor),
       enrich(selection.head),
     );
+    if (state.editorSession) state.editorSession.selection = state.selection;
     const blockElement = root.querySelector(`[data-block-id="${selection.anchor.blockId}"]`);
     state.selectionIndex = blockElement ? Number(blockElement.dataset.blockIndex) : null;
     root.dataset.selectionBlock = selection.anchor.blockId;
@@ -2363,7 +2505,7 @@ function scheduleAutoSave() {
     const editor = qs('#block-editor');
     if (editor && result) editor.dataset.workerRoundtrip = String(result.exact);
   }).catch(() => {});
-  autoSaveTimer = setTimeout(() => saveCurrentDoc(), 2000);
+  autoSaveTimer = setTimeout(() => saveCurrentDoc(), getSetting('editor.autosaveDelay', 2000));
   updateTitleDirty();
 }
 
@@ -2423,40 +2565,8 @@ async function performSave(saveAs = false) {
     updateTitleDirty();
   };
 
-  if (state.isDBMode) {
-    const name = docSnapshot ? fileNameWithoutExt(docSnapshot.name) : '未命名';
-    try {
-      if (docSnapshot && docSnapshot.id) {
-        state.currentRevision = await DBUpdateDocument(
-          docSnapshot.id,
-          name + '.md',
-          md,
-          state.currentRevision,
-        );
-        finishSaveState(stillSameDoc() ? docSnapshot : null);
-      } else {
-        const id = await DBCreateDocument(name + '.md', md);
-        state.currentRevision = 1;
-        const nextDoc = stillSameDoc() ? { id, name: name + '.md' } : null;
-        finishSaveState(nextDoc);
-        try { state.docs = await DBListDocuments() || []; } catch (e) {}
-        const nav = qs('#file-tree-nav');
-        if (nav && nextDoc) {
-          nav.innerHTML = '<div class="sidebar-empty">数据库存储</div>';
-        }
-      }
-    } catch (e) {
-      updateTitleDirty();
-      if (String(e?.message || e).includes('revision conflict')) {
-        alert('检测到文档版本冲突。请先查看版本历史，或重新打开文档后再保存。');
-      }
-      console.error('DB save error:', e);
-    }
-    if (!state.isDirty) await safety.clearRecoverySnapshot();
-    return;
-  }
-
-  if (!docSnapshot || saveAs) {
+  const needsSaveAs = !docSnapshot || saveAs || !docSnapshot.path;
+  if (needsSaveAs) {
     if (!docSnapshot && !state.isDirty && !saveAs && (!md || !md.trim())) return;
 
     try {
@@ -2554,11 +2664,19 @@ function markModelPersisted() {
 }
 
 function updateTitleDirty() {
-  void SetPendingChanges(state.isDirty ? 1 : 0, state.currentDoc?.name || '未命名.md');
+  void SetPendingChanges(state.isDirty ? 1 : 0, state.currentDoc?.name || `${t('main.untitled')}.md`);
   const titleEl = qs('#editor-title');
   if (!titleEl) return;
-  const name = state.currentDoc ? fileNameWithoutExt(state.currentDoc.name) : '未命名';
-  titleEl.innerHTML = '<svg data-lucide="file-text" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5" class="titlebar-md-icon"></svg>' + escapeHtml(name) + '.md' + (state.isDirty ? ' *' : '');
+  const name = state.currentDoc ? fileNameWithoutExt(state.currentDoc.name) : t('main.untitled');
+  titleEl.textContent = `${name}.md${state.isDirty ? ' *' : ''}`;
+  const subtitle = qs('#editor-document-subtitle');
+  if (subtitle) {
+    subtitle.textContent = state.isDirty
+      ? t('main.dirty')
+      : state.currentDoc?.path
+        ? t('main.savedLocal')
+        : t('main.unsavedLocal');
+  }
 }
 
 async function applyExternalDocument(meta) {
@@ -2582,18 +2700,15 @@ async function restoreDocumentSnapshot(snapshot) {
   state.currentContent = snapshot.content || '';
   state.currentRevision = snapshot.revision || 0;
   state.currentHash = snapshot.contentHash || '';
-  state.isDBMode = snapshot.isDBMode === true;
   state.isDirty = true;
   renderEditor();
 }
 
 async function deleteCurrentDocument() {
   if (!state.currentDoc) return;
-  if (!confirm('将当前文档移到回收站？')) return;
+  if (!confirm(t('main.deleteConfirm'))) return;
   try {
-    if (state.isDBMode && state.currentDoc.id) {
-      await DBDeleteDocument(state.currentDoc.id);
-    } else if (state.currentDoc.path) {
+    if (state.currentDoc.path) {
       await DeleteDocument(state.currentDoc.path);
     }
     safety.stopFileWatcher();
@@ -2609,68 +2724,35 @@ async function deleteCurrentDocument() {
   }
 }
 
-// ============================================================
-// 新建文档
-// ============================================================
-async function createNewDoc() {
-  const title = prompt('文档标题', '无题');
-  if (!title || !title.trim()) return;
-  try {
-    if (state.isDBMode) {
-      const fullName = title.trim() + '.md';
-      const id = await DBCreateDocument(fullName, `# ${title.trim()}\n\n`);
-      const doc = { id, name: fullName };
-      state.docs.unshift(doc);
-      state.currentDoc = doc;
-      state.currentContent = `# ${title.trim()}\n\n`;
-      state.currentRevision = 1;
-      state.currentHash = '';
-    } else {
-      const doc = await CreateDocument(state.docDir, title.trim());
-      state.docs.unshift(doc);
-      state.currentDoc = doc;
-      state.currentContent = `# ${title.trim()}\n\n`;
-      state.currentRevision = 1;
-      const meta = await ReadDocumentWithMeta(doc.path);
-      state.currentHash = meta?.contentHash || '';
-      safety.startFileWatcher(doc.path);
-    }
-    renderEditor();
-  } catch (e) {
-    console.error(e);
+async function handleTreeDocumentDeleted(path) {
+  if (state.currentDoc?.path === path) {
+    safety.stopFileWatcher();
+    await safety.clearRecoverySnapshot();
+    state.currentDoc = null;
+    state.currentContent = '';
+    state.currentRevision = 0;
+    state.currentHash = '';
+    state.selection = null;
+    state.selectionIndex = null;
+    state.isDirty = false;
+    state.editorSession = null;
+    compositionController.cancel();
+    resetParseResult();
   }
-}
-
-async function createNewDocFromEditor() {
-  const title = prompt('文档标题', '无题');
-  if (!title || !title.trim()) return;
-  try {
-    await saveCurrentDoc();
-    const doc = await CreateDocument(state.docDir, title.trim());
-    state.docs.unshift(doc);
-    state.currentDoc = doc;
-    state.currentContent = `# ${title.trim()}\n\n`;
-    state.currentRevision = 1;
-    const meta = await ReadDocumentWithMeta(doc.path);
-    state.currentHash = meta?.contentHash || '';
-    safety.startFileWatcher(doc.path);
-    renderEditor();
-  } catch (e) {
-    console.error(e);
-  }
+  await initLibrary();
 }
 
 // ============================================================
 // Lucide 图标初始化
 // ============================================================
-function lucideIcons() {
-  createIcons({ icons: LUCIDE_ICONS });
-}
 // ============================================================
 // 应用启动
 // ============================================================
 async function init() {
   $app = document.querySelector('#app');
+  markdownAssetResolver.start();
+
+  await pluginRuntime.start();
 
   try {
     const recovered = await safety.offerCrashRecovery();
@@ -2686,7 +2768,7 @@ async function init() {
   state.docs = [];
 
   // 初始化窗口拖动
-  initWindowDrag();
+  await windowDrag.start();
 
   // 菜单栏保存事件监听（Wails 开发模式热重载时可能失败）
   try { EventsOn('menu:save', () => { saveCurrentDoc(false); }); } catch (e) {}
@@ -2708,9 +2790,39 @@ async function init() {
     event.returnValue = '';
   });
 
+  window.addEventListener('app-language-change', () => {
+    if (state.view === 'home') {
+      void renderHome();
+    } else if (state.view === 'editor') {
+      renderEditor();
+    }
+  });
+
   // Cmd+S 全局保存
   document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    if (state.view === 'editor' && state.currentDoc) {
+      if (matchesShortcut(e, getSetting('shortcuts.find', 'Cmd+F'))) {
+        e.preventDefault();
+        openFindReplace();
+        return;
+      }
+      if (matchesShortcut(e, getSetting('shortcuts.replace', 'Cmd+H'))) {
+        e.preventDefault();
+        openFindReplace({ replace: true });
+        return;
+      }
+    }
+    if (matchesShortcut(e, getSetting('shortcuts.openSettings', 'Cmd+,'))) {
+      e.preventDefault();
+      setWorkspacePanel('settings');
+      return;
+    }
+    if (matchesShortcut(e, getSetting('shortcuts.toggleSidebar', 'Cmd+Shift+B'))) {
+      e.preventDefault();
+      setWorkspacePanel(workspacePanel === 'outline' ? 'files' : 'outline');
+      return;
+    }
+    if (matchesShortcut(e, getSetting('shortcuts.save', 'Cmd+S'))) {
       e.preventDefault();
       saveCurrentDoc(false);
     }
@@ -2720,24 +2832,12 @@ async function init() {
   let lastState = null;
   try { lastState = await restoreAppState(); } catch (e) {}
   if (lastState) {
-    state.isDBMode = lastState.isDBMode === true;
     if (lastState.docDir) state.docDir = lastState.docDir;
 
     if (lastState.lastView === 'editor') {
       // 恢复编辑器
       state.view = 'editor';
-      if (state.isDBMode && lastState.lastDocId) {
-        try {
-          const result = await DBReadDocument(lastState.lastDocId);
-          if (result) {
-            state.currentDoc = { id: lastState.lastDocId, name: result.name || lastState.lastDocName };
-            state.currentContent = result.content || '';
-            state.currentRevision = result.revision || 0;
-            renderEditor();
-            return;
-          }
-        } catch (e) {}
-      } else if (!state.isDBMode && lastState.lastDocPath) {
+      if (lastState.lastDocPath) {
         try {
           const meta = await ReadDocumentWithMeta(lastState.lastDocPath);
           state.currentDoc = { name: lastState.lastDocName, path: lastState.lastDocPath, size: meta.content.length, modTime: '' };
@@ -2754,20 +2854,10 @@ async function init() {
       }
     }
 
-    if (lastState.lastView === 'library') {
-      // 恢复文档库视图
-      if (!state.isDBMode && state.docDir) {
-        try { await initLibrary(); return; } catch (e) {}
-      }
-      if (state.isDBMode) {
-        try { await initLibrary(); return; } catch (e) {}
-      }
-    }
   }
 
-  // 默认进入文档库（DB模式）
-  state.isDBMode = true;
-  try { await initLibrary(); } catch (e) { renderHome(); }
+  // 默认进入编辑器工作区
+  try { await initLibrary(); } catch (e) { await renderHome(); }
 }
 
 // ============================================================
@@ -2787,16 +2877,35 @@ function getCurrentMd() {
 function getExportName(ext) {
   const name = state.currentDoc
     ? fileNameWithoutExt(state.currentDoc.name)
-    : '未命名';
+    : t('main.untitled');
   return name + '.' + ext;
 }
 
-const { handleExport } = createExportModule({
+function handleExportWithPlugins(format) {
+  const exportService = pluginRuntime?.getService('export');
+  if (!exportService?.handleExport) {
+    alert(t('find.exportDisabled'));
+    return;
+  }
+  exportService.handleExport(format);
+}
+
+function updateExportPluginState() {
+  const button = qs('#btn-export');
+  if (!button) return;
+  const enabled = Boolean(pluginRuntime?.getService('export'));
+  button.disabled = !enabled;
+  button.classList.toggle('is-disabled', !enabled);
+  button.title = enabled ? t('main.export') : t('main.exportDisabledTitle');
+}
+
+const exportModule = createExportModule({
   getCurrentMd,
   getExportName,
-  sanitizeHtml,
+  renderMarkdown: markdownRenderer.render,
   escapeHtml,
 });
+const { handleExport } = exportModule;
 
 const {
   findDocByPath,
@@ -2811,6 +2920,8 @@ const {
   lucideIcons,
   openEditor,
   saveCurrentDoc,
+  onCurrentDocumentDeleted: handleTreeDocumentDeleted,
+  t,
 });
 
 const safety = createSafetyModule({
@@ -2824,25 +2935,117 @@ const safety = createSafetyModule({
   onSaveCopy: () => saveCurrentDoc(true),
   onContentRestored: restoreDocumentSnapshot,
   onWorkspaceChanged: initLibrary,
+  getWatcherInterval: () => getSetting('files.watcherInterval', 3000),
 });
 
-const {
-  loadSettings,
-  applySettings,
-  openSettingsModal,
-} = createSettingsModule({
+const settingsModule = createSettingsModule({
   state,
   storage,
   appVersion: APP_VERSION,
   appRepo: APP_REPO,
   checkForUpdate,
-  escapeHtml,
+  openExternal: isBrowserMode() ? null : url => BrowserOpenURL(url),
   qs,
   getApp: () => $app,
   lucideIcons,
   renderEditor,
-  initLibrary,
 });
+
+const {
+  loadSettings,
+  saveSettings,
+  applySettings,
+  getSettings,
+  getSetting,
+  setPluginRuntime,
+  openSettingsModal,
+} = settingsModule;
+
+async function loadPluginPreferences() {
+  try {
+    const settings = await storage.loadAppSettings();
+    if (settings?.pluginPreferences) return JSON.parse(settings.pluginPreferences);
+  } catch (error) {
+    // Fall through to local storage.
+  }
+  try {
+    return JSON.parse(localStorage.getItem('plugin_preferences') || '{}');
+  } catch (error) {
+    return {};
+  }
+}
+
+async function savePluginPreferences(preferences) {
+  const serialized = JSON.stringify(preferences || {});
+  try {
+    await storage.saveAppSetting('pluginPreferences', serialized);
+  } catch (error) {
+    // Browser adapter does not persist app settings.
+  }
+  try {
+    localStorage.setItem('plugin_preferences', serialized);
+  } catch (error) {
+    // Ignore local storage failure.
+  }
+}
+
+pluginRuntime = createAppPluginRuntime({
+  appVersion: APP_VERSION,
+  hostName: storage.name === 'wails' ? 'Wails' : 'Browser',
+  hostService: {
+    name: storage.name,
+    appVersion: APP_VERSION,
+  },
+  editorCoreService: {
+    parse: markdown => parseMarkdown(markdown),
+    createSession: (markdown, selection = null) => createEditorSession(parseMarkdown(markdown), selection),
+    serialize: serializeDocument,
+  },
+  markdownService: {
+    render: markdown => markdownRenderer.render(markdown),
+    sanitize: sanitizeHtml,
+  },
+  shortcutService: {
+    all: () => getSettings().shortcuts,
+    get: key => getSetting(`shortcuts.${key}`, ''),
+  },
+  workspaceService: {
+    selectDirectory: NativeSelectDocumentDir,
+    listDocuments: NativeListDocuments,
+    listDocumentTree: NativeListDocumentTree,
+    readDocument: NativeReadDocument,
+    readDocumentWithMeta: NativeReadDocumentWithMeta,
+    writeDocument: NativeWriteDocument,
+    writeImageAsset: NativeWriteImageAsset,
+  },
+  documentStoreService: {
+    listFileVersions: NativeListFileVersions,
+    restoreFileVersion: NativeRestoreFileVersion,
+    deleteDocument: NativeDeleteDocument,
+    listRecycleBin: NativeListRecycleBin,
+    restoreRecycleItem: NativeRestoreRecycleItem,
+    purgeRecycleItem: NativePurgeRecycleItem,
+  },
+  settingsService: {
+    load: loadSettings,
+    save: saveSettings,
+    get: getSetting,
+  },
+  exportService: {
+    handleExport,
+  },
+  recoveryService: {
+    persist: safety.persistRecoverySnapshot,
+    clear: safety.clearRecoverySnapshot,
+    restore: safety.offerCrashRecovery,
+  },
+  pluginStorage: storage,
+  loadPreferences: loadPluginPreferences,
+  savePreferences: savePluginPreferences,
+});
+
+setPluginRuntime(pluginRuntime);
+pluginRuntime.subscribe(updateExportPluginState);
 
 function runCompositionSelfTest() {
   const source = qs('.block.active .block-source');
@@ -2927,5 +3130,10 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('inpu
   setTimeout(() => clearInterval(timer), 5000);
 }
 
-// Start
-init().catch(console.error);
+const application = bootstrapApplication({ init });
+application.onDispose(() => {
+  markdownAssetResolver.stop();
+  windowDrag.dispose();
+  void pluginRuntime.dispose();
+});
+void application.start();

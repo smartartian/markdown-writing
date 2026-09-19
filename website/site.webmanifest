@@ -1,0 +1,21 @@
+{
+  "name": "Markdown Writing",
+  "short_name": "Markdown Writing",
+  "description": "本地优先的 Markdown 桌面写作工具",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f2ec",
+  "theme_color": "#f5f2ec",
+  "icons": [
+    {
+      "src": "./assets/logo-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/logo-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    }
+  ]
+}

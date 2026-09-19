@@ -2,6 +2,8 @@
 
 Markdown Writing is a desktop Markdown editor built with Wails, Go, SQLite, and a vanilla JavaScript frontend.
 
+Current release: `0.0.1`. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ## Features
 
 - Block-oriented Markdown editing with a source mode fallback
@@ -9,6 +11,7 @@ Markdown Writing is a desktop Markdown editor built with Wails, Go, SQLite, and 
 - Recent files, file tree navigation, outline navigation, and autosave
 - Revision-aware saving, version history, recycle bin, and crash recovery snapshots
 - Markdown, text, image, PDF, and Word-compatible HTML export
+- Theme system with light/dark modes, four built-in palettes, and JSON-based user themes
 - Sanitized Markdown rendering for embedded HTML
 - Path-scoped desktop file access
 
@@ -21,6 +24,9 @@ Markdown Writing is a desktop Markdown editor built with Wails, Go, SQLite, and 
 - `modules/editor.js`: Markdown block parsing and rendering
 - `modules/file-tree.js`: document tree rendering and delegated navigation
 - `modules/settings.js`: settings UI and persistence
+- `i18n/index.js`: interface language resolution, translations, and runtime switching
+- `themes/`: theme schema, built-in palettes, validation, migration, and CSS variable application
+- `plugin-runtime/index.js`: Lattice application runtime and plugin inventory bridge
 - `modules/export.js`: Markdown, text, image, PDF, and Word export
 - `main.js`: application orchestration and view composition
 
@@ -29,6 +35,9 @@ The first layer provides immutable documents, stable block IDs, reversible
 transactions, revision conflict detection, and Markdown golden tests.
 It now also includes selection mapping, composition handling, command
 registration, parser worker support, and model-level undo/redo.
+
+Custom theme files are documented in [docs/theme-config.md](docs/theme-config.md).
+Trusted local plugin packages are documented in [docs/plugin-packages.md](docs/plugin-packages.md).
 
 ## Development
 
@@ -51,6 +60,7 @@ Run checks:
 go test ./...
 go vet ./...
 cd frontend && npm run build
+cd ../website && npm run check && npm test
 ```
 
 ## Build
@@ -68,6 +78,10 @@ The standalone product website lives in `website/`. Preview it with:
 ```sh
 python3 -m http.server 4173 -d website
 ```
+
+Pushes that change `website/` deploy the static site through GitHub Pages.
+The release workflow also refreshes `website/releases.json` whenever a GitHub
+Release is published.
 
 ## Manual GUI QA
 
