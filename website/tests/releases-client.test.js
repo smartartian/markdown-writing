@@ -5,6 +5,7 @@ import {
   findPlatformAsset,
   formatReleaseDate,
   getReleases,
+  localizeRelease,
 } from '../releases-client.js';
 
 function createMemoryStorage() {
@@ -62,9 +63,10 @@ test('release dates and invalid dates use stable labels', () => {
   assert.match(formatReleaseDate('2026-09-18T00:00:00Z'), /2026/);
   assert.equal(formatReleaseDate('not-a-date'), '未标注日期');
   assert.equal(formatReleaseDate(''), '未标注日期');
+  assert.equal(formatReleaseDate('not-a-date', 'en-US'), 'Date unavailable');
 });
 
-test('platform asset lookup prefers architecture-specific packages', () => {
+test('platform asset lookup only exposes Apple Silicon packages', () => {
   const release = {
     assets: [
       { name: 'Markdown-Writing-macos-x64.zip', browser_download_url: 'https://example.com/x64' },
@@ -74,6 +76,24 @@ test('platform asset lookup prefers architecture-specific packages', () => {
   };
 
   assert.equal(findPlatformAsset(release, 'mac-arm64').browser_download_url, 'https://example.com/arm64');
-  assert.equal(findPlatformAsset(release, 'mac-x64').browser_download_url, 'https://example.com/x64');
-  assert.equal(findPlatformAsset(release, 'windows').browser_download_url, 'https://example.com/windows');
+  assert.equal(findPlatformAsset(release, 'mac-x64'), null);
+  assert.equal(findPlatformAsset(release, 'windows'), null);
+});
+
+test('release localization uses explicit translations before original notes', () => {
+  const translated = localizeRelease({
+    tag_name: 'v1.0.0',
+    body: '中文说明',
+    i18n: { en: { name: 'Version 1.0.0', body: 'English notes' } },
+  }, 'en');
+  assert.equal(translated.localizedName, 'Version 1.0.0');
+  assert.equal(translated.localizedBody, 'English notes');
+  assert.equal(translated.usesOriginalLanguage, false);
+
+  const fallback = localizeRelease({
+    tag_name: 'v1.0.0',
+    body: '中文说明',
+  }, 'en');
+  assert.equal(fallback.localizedBody, '中文说明');
+  assert.equal(fallback.usesOriginalLanguage, true);
 });

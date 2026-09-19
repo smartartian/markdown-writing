@@ -1,5 +1,6 @@
 export const REPO = 'smartartian/Markdown-writing';
 export const RELEASES_URL = `https://github.com/${REPO}/releases`;
+export const TARGET_PLATFORM = 'mac-arm64';
 
 const RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 const CACHE_KEY = `markdown-writing-releases:${REPO}`;
@@ -73,11 +74,30 @@ export function latestRelease(releases) {
   return releases.find(release => !release.draft) || null;
 }
 
-export function formatReleaseDate(value) {
-  if (!value) return '未标注日期';
+export function localizeRelease(release, language = 'zh') {
+  if (!release) return null;
+  const localized = release.i18n?.[language]
+    || release.translations?.[language]
+    || {};
+  const fallbackBody = String(release.body || '');
+  const localizedBody = String(localized.body || fallbackBody);
+  const usesOriginalLanguage = language === 'en'
+    && !localized.body
+    && /[\u3400-\u9fff]/.test(fallbackBody);
+
+  return {
+    ...release,
+    localizedName: localized.name || release.name || release.tag_name || '',
+    localizedBody,
+    usesOriginalLanguage,
+  };
+}
+
+export function formatReleaseDate(value, dateLocale = 'zh-CN') {
+  if (!value) return dateLocale.startsWith('zh') ? '未标注日期' : 'Date unavailable';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '未标注日期';
-  return new Intl.DateTimeFormat('zh-CN', {
+  if (Number.isNaN(date.getTime())) return dateLocale.startsWith('zh') ? '未标注日期' : 'Date unavailable';
+  return new Intl.DateTimeFormat(dateLocale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -85,32 +105,14 @@ export function formatReleaseDate(value) {
 }
 
 export function detectPlatform() {
-  const ua = navigator.userAgent || '';
-  const platform = navigator.userAgentData?.platform || navigator.platform || '';
-  const architecture = navigator.userAgentData?.architecture || '';
-  if (/Mac/i.test(platform) || /Mac OS/i.test(ua)) {
-    return /arm64|aarch64|arm/i.test(`${architecture} ${ua}`) ? 'mac-arm64' : 'mac-x64';
-  }
-  if (/Win/i.test(platform) || /Windows/i.test(ua)) return 'windows';
-  if (/Linux/i.test(platform) || /Linux/i.test(ua)) return 'linux';
-  return 'unknown';
+  return TARGET_PLATFORM;
 }
 
 export function findPlatformAsset(release, platform) {
+  if (platform !== TARGET_PLATFORM) return null;
   const assets = release?.assets || [];
   const match = name => assets.find(asset => String(asset.name || '').toLowerCase().includes(name));
-  switch (platform) {
-    case 'mac-arm64':
-      return match('aarch64') || match('arm64') || match('apple-silicon');
-    case 'mac-x64':
-      return match('x86_64') || match('x64') || match('intel');
-    case 'windows':
-      return match('.exe') || match('.msi') || match('windows');
-    case 'linux':
-      return match('.appimage') || match('.deb') || match('linux');
-    default:
-      return null;
-  }
+  return match('aarch64') || match('arm64') || match('apple-silicon');
 }
 
 export function formatFileSize(bytes) {

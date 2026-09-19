@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Markdown Writing 更新记录，同步 GitHub Releases 的最新版本、发布时间和更新说明。">
-  <meta name="theme-color" content="#f5f2ec">
+  <meta name="description" content="同步 Markdown Writing 在 GitHub Releases 发布的版本、时间和更新说明。">
+  <meta name="theme-color" content="#eef1ef">
   <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/updates.html">
+  <link rel="alternate" hreflang="zh-CN" href="https://smartartian.github.io/Markdown-writing/updates.html?lang=zh-CN">
+  <link rel="alternate" hreflang="en" href="https://smartartian.github.io/Markdown-writing/updates.html?lang=en">
+  <link rel="alternate" hreflang="x-default" href="https://smartartian.github.io/Markdown-writing/updates.html">
   <link rel="icon" type="image/png" href="./assets/logo-64.png">
   <link rel="apple-touch-icon" href="./assets/logo-128.png">
   <link rel="manifest" href="./site.webmanifest">
@@ -16,34 +19,39 @@
   <meta property="og:description" content="同步 GitHub Releases 的最新版本、发布时间和更新说明。">
   <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <meta property="og:locale" content="zh_CN">
+  <meta property="og:locale:alternate" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="更新记录 - Markdown Writing">
   <meta name="twitter:description" content="同步 GitHub Releases 的最新版本、发布时间和更新说明。">
   <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <title>更新记录 - Markdown Writing</title>
   <script>document.documentElement.classList.add('js');</script>
-  <link rel="stylesheet" href="./styles.css?v=20260918-6">
+  <link rel="stylesheet" href="./styles.css?v=20260919-3">
 </head>
-<body class="updates-page">
-  <a class="skip-link" href="#main-content">跳到主要内容</a>
+<body class="updates-page" data-page="updates">
+  <a class="skip-link" href="#main-content" data-i18n="skip.link">跳到主要内容</a>
   <header class="site-header scrolled" id="site-header">
     <div class="nav-shell">
-      <a class="brand" href="./index.html#top" aria-label="Markdown Writing 首页">
+      <a class="brand" href="./index.html#top" aria-label="Markdown Writing">
         <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
         <span>Markdown Writing</span>
       </a>
       <nav class="desktop-nav" aria-label="主导航">
-        <a href="./index.html#features">功能</a>
-        <a href="./index.html#workflow">工作流</a>
-        <a href="./index.html#security">数据安全</a>
-        <a href="./index.html#export">导出</a>
-        <a class="active" href="./updates.html" aria-current="page">更新记录</a>
-        <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="./index.html#workflow" data-i18n="nav.workflow">工作流</a>
+        <a href="./index.html#capabilities" data-i18n="nav.capabilities">能力</a>
+        <a href="./index.html#themes" data-i18n="nav.themes">主题</a>
+        <a href="./index.html#safety" data-i18n="nav.safety">可靠性</a>
+        <a class="active" href="./updates.html" aria-current="page" data-i18n="nav.updates">更新记录</a>
+        <a href="./download.html" data-i18n="action.download">下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-small button-dark" href="./index.html#download">
+        <div class="language-switch" role="group" data-i18n-aria-label="lang.label">
+          <button type="button" data-language="zh" aria-pressed="true">中</button>
+          <button type="button" data-language="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="button button-small button-primary" href="./index.html#download">
           <i data-lucide="download"></i>
-          下载
+          <span data-i18n="action.download">下载</span>
         </a>
         <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
           <i data-lucide="menu"></i>
@@ -51,13 +59,17 @@
       </div>
     </div>
     <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
-      <a href="./index.html#features">功能</a>
-      <a href="./index.html#workflow">工作流</a>
-      <a href="./index.html#security">数据安全</a>
-      <a href="./index.html#export">导出</a>
-      <a href="./updates.html">更新记录</a>
-      <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
-      <a href="./index.html#download">下载桌面版</a>
+      <div class="mobile-language">
+        <button type="button" data-language="zh">中文</button>
+        <button type="button" data-language="en">English</button>
+      </div>
+      <a href="./index.html#workflow" data-i18n="nav.workflow">工作流</a>
+      <a href="./index.html#capabilities" data-i18n="nav.capabilities">能力</a>
+      <a href="./index.html#themes" data-i18n="nav.themes">主题</a>
+      <a href="./index.html#safety" data-i18n="nav.safety">可靠性</a>
+      <a href="./updates.html" data-i18n="nav.updates">更新记录</a>
+      <a href="./download.html" data-i18n="action.download">下载</a>
+      <a href="./index.html#download" data-i18n="action.downloadMac">下载 macOS</a>
     </nav>
   </header>
 
@@ -65,18 +77,18 @@
     <section class="updates-hero">
       <div class="section-shell updates-hero-inner">
         <div>
-          <span class="eyebrow">GitHub Releases</span>
-          <h1>更新记录</h1>
-          <p>这里展示 Markdown Writing 在 GitHub 发布的版本、时间和更新说明。数据直接来自仓库 Releases，官网不会维护另一份版本列表。</p>
+          <span class="eyebrow" data-i18n="updates.heroEyebrow">Release archive</span>
+          <h1 data-i18n="updates.heroTitle">更新记录</h1>
+          <p data-i18n="updates.heroLead">这里展示 Markdown Writing 在 GitHub 发布的版本、时间和更新说明。官网不维护另一份版本列表。</p>
         </div>
         <div class="updates-actions">
-          <a class="button button-dark" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+          <a class="button button-primary" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
             <i data-lucide="external-link"></i>
-            在 GitHub 查看
+            <span data-i18n="action.openGithub">在 GitHub 查看</span>
           </a>
-          <button class="button button-light" id="refresh-updates" type="button">
+          <button class="button button-secondary" id="refresh-updates" type="button">
             <i data-lucide="refresh-cw"></i>
-            重新同步
+            <span data-i18n="action.refresh">重新同步</span>
           </button>
         </div>
       </div>
@@ -84,16 +96,16 @@
 
     <section class="section-shell updates-content">
       <div class="updates-toolbar">
-        <div>
-          <span class="updates-source">数据源</span>
-          <a href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">smartartian/Markdown-writing</a>
-        </div>
-        <span id="updates-synced">等待同步</span>
+        <span class="updates-sync-status">
+          <span class="status-dot"></span>
+          <span id="updates-synced" data-i18n="updates.waiting">等待同步</span>
+        </span>
+        <span class="updates-source-note" data-i18n="updates.sourceHint">版本数据来自 GitHub Releases</span>
       </div>
 
       <div class="updates-status" id="updates-status" role="status" aria-live="polite">
         <span class="updates-spinner"></span>
-        正在从 GitHub 获取更新记录...
+        <span data-i18n="updates.loading">正在从 GitHub 获取更新记录...</span>
       </div>
       <div class="release-list" id="release-list"></div>
     </section>
@@ -105,12 +117,18 @@
         <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
         <span>Markdown Writing</span>
       </a>
-      <p>本地优先的 Markdown 桌面写作工具。</p>
-      <span id="copyright-year"></span>
+      <p data-i18n="footer.tagline">本地优先的 macOS Markdown 桌面写作工具。</p>
+      <div class="footer-source">
+        <span>
+          <span data-i18n="updates.source">数据源</span>
+          <a href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">smartartian/Markdown-writing</a>
+        </span>
+        <span id="copyright-year"></span>
+      </div>
     </div>
   </footer>
 
-  <script src="./vendor/lucide.min.js?v=20260918-6"></script>
-  <script type="module" src="./updates.js?v=20260918-6"></script>
+  <script src="./vendor/lucide.min.js?v=20260919-3"></script>
+  <script type="module" src="./updates.js?v=20260919-3"></script>
 </body>
 </html>

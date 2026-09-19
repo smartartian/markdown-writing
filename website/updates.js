@@ -2,13 +2,17 @@ import {
   REPO,
   formatReleaseDate,
   getReleases,
+  localizeRelease,
 } from './releases-client.js';
+import { getLanguage, locale, t } from './i18n.js';
 import { initSiteShell, renderIcons } from './site.js';
 
 const releaseList = document.querySelector('#release-list');
 const statusElement = document.querySelector('#updates-status');
 const syncedElement = document.querySelector('#updates-synced');
 const refreshButton = document.querySelector('#refresh-updates');
+let cachedReleases = [];
+let lastSyncTime = null;
 
 function escapeHtml(value) {
   return String(value || '')
@@ -80,21 +84,22 @@ function renderReleaseNotes(markdown) {
 }
 
 function releaseType(release) {
-  if (release.prerelease) return { className: 'preview', label: '预览版' };
-  if (release.draft) return { className: 'draft', label: '草稿' };
-  return { className: 'stable', label: '正式版' };
+  if (release.prerelease) return { className: 'preview', label: t('updates.preview') };
+  if (release.draft) return { className: 'draft', label: t('updates.draft') };
+  return { className: 'stable', label: t('updates.stable') };
 }
 
 function renderReleases(releases) {
+  cachedReleases = releases;
   if (!releases.length) {
     statusElement.hidden = true;
     releaseList.innerHTML = `
       <div class="updates-empty">
         <span class="feature-icon"><i data-lucide="inbox"></i></span>
-        <h2>还没有公开版本</h2>
-        <p>GitHub Releases 中暂时没有可展示的版本记录。发布后，这里会自动同步。</p>
-        <a class="button button-dark" href="https://github.com/${REPO}/releases" target="_blank" rel="noreferrer">
-          前往 GitHub Releases
+        <h2>${escapeHtml(t('updates.emptyTitle'))}</h2>
+        <p>${escapeHtml(t('updates.emptyBody'))}</p>
+        <a class="button button-primary" href="https://github.com/${REPO}/releases" target="_blank" rel="noreferrer">
+          ${escapeHtml(t('action.githubReleases'))}
         </a>
       </div>
     `;
@@ -105,8 +110,12 @@ function renderReleases(releases) {
   statusElement.hidden = true;
   releaseList.innerHTML = releases.map(release => {
     const type = releaseType(release);
-    const title = release.name || release.tag_name || '未命名版本';
-    const notes = renderReleaseNotes(release.body || '该版本暂未填写更新说明。');
+    const localized = localizeRelease(release, getLanguage());
+    const title = localized.localizedName || t('updates.untitled');
+    const notes = renderReleaseNotes(localized.localizedBody || t('updates.noNotes'));
+    const originalNote = localized.usesOriginalLanguage
+      ? `<div class="release-original-note">${escapeHtml(t('updates.originalNotes'))}</div>`
+      : '';
     return `
       <article class="release-card">
         <header class="release-header">
@@ -117,14 +126,15 @@ function renderReleases(releases) {
             </div>
             <div class="release-meta">
               <span><i data-lucide="tag"></i>${escapeHtml(release.tag_name || '')}</span>
-              <span><i data-lucide="calendar-days"></i>${escapeHtml(formatReleaseDate(release.published_at))}</span>
+              <span><i data-lucide="calendar-days"></i>${escapeHtml(formatReleaseDate(release.published_at, locale()))}</span>
             </div>
           </div>
           <a class="release-link" href="${escapeHtml(safeUrl(release.html_url) || `https://github.com/${REPO}/releases`)}" target="_blank" rel="noreferrer">
-            在 GitHub 查看
+            ${escapeHtml(t('action.openGithub'))}
             <i data-lucide="arrow-up-right"></i>
           </a>
         </header>
+        ${originalNote}
         <div class="release-notes">${notes}</div>
       </article>
     `;
@@ -134,15 +144,15 @@ function renderReleases(releases) {
 
 function showError(error) {
   statusElement.hidden = true;
-  syncedElement.textContent = '同步失败';
+  syncedElement.textContent = t('updates.syncFailed');
   releaseList.innerHTML = `
     <div class="updates-empty error">
       <span class="feature-icon"><i data-lucide="cloud-off"></i></span>
-      <h2>暂时无法读取 GitHub 更新</h2>
-      <p>${escapeHtml(error.message || '网络请求失败，请稍后重试。')}</p>
+      <h2>${escapeHtml(t('updates.errorTitle'))}</h2>
+      <p>${escapeHtml(error.message || t('updates.errorFallback'))}</p>
       <div class="updates-empty-actions">
-        <button class="button button-dark" id="retry-updates" type="button">重新加载</button>
-        <a class="button button-light" href="https://github.com/${REPO}/releases" target="_blank" rel="noreferrer">打开 GitHub Releases</a>
+        <button class="button button-primary" id="retry-updates" type="button">${escapeHtml(t('updates.retry'))}</button>
+        <a class="button button-secondary" href="https://github.com/${REPO}/releases" target="_blank" rel="noreferrer">${escapeHtml(t('action.githubReleases'))}</a>
       </div>
     </div>
   `;
@@ -154,14 +164,15 @@ async function loadReleases({ force = false } = {}) {
   refreshButton.disabled = true;
   statusElement.hidden = false;
   releaseList.innerHTML = '';
-  statusElement.innerHTML = '<span class="updates-spinner"></span>正在从 GitHub 获取更新记录...';
+  statusElement.innerHTML = `<span class="updates-spinner"></span><span>${escapeHtml(t('updates.loading'))}</span>`;
 
   try {
     const releases = await getReleases({ force });
-    syncedElement.textContent = `最近同步：${new Intl.DateTimeFormat('zh-CN', {
+    lastSyncTime = new Intl.DateTimeFormat(locale(), {
       hour: '2-digit',
       minute: '2-digit',
-    }).format(new Date())}`;
+    }).format(new Date());
+    syncedElement.textContent = t('updates.synced', { time: lastSyncTime });
     renderReleases(releases);
   } catch (error) {
     showError(error);
@@ -174,3 +185,15 @@ refreshButton?.addEventListener('click', () => loadReleases({ force: true }));
 initSiteShell({ solidHeader: true });
 renderIcons();
 loadReleases();
+
+window.addEventListener('site-language-change', () => {
+  if (lastSyncTime) {
+    lastSyncTime = new Intl.DateTimeFormat(locale(), {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date());
+    syncedElement.textContent = t('updates.synced', { time: lastSyncTime });
+  }
+  if (cachedReleases.length) renderReleases(cachedReleases);
+  else loadReleases();
+});

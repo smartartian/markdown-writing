@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Markdown Writing 的 macOS Apple Silicon 安装、首次启动与故障排查说明。">
+  <meta name="theme-color" content="#eef1ef">
+  <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/install.html">
+  <link rel="alternate" hreflang="zh-CN" href="https://smartartian.github.io/Markdown-writing/install.html?lang=zh-CN">
+  <link rel="alternate" hreflang="en" href="https://smartartian.github.io/Markdown-writing/install.html?lang=en">
+  <link rel="alternate" hreflang="x-default" href="https://smartartian.github.io/Markdown-writing/install.html">
+  <link rel="icon" type="image/png" href="./assets/logo-64.png">
+  <link rel="apple-touch-icon" href="./assets/logo-128.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Markdown Writing">
+  <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/install.html">
+  <meta property="og:title" content="安装说明 - Markdown Writing">
+  <meta property="og:description" content="macOS Apple Silicon 安装、首次启动与故障排查说明。">
+  <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="安装说明 - Markdown Writing">
+  <meta name="twitter:description" content="macOS Apple Silicon 安装、首次启动与故障排查说明。">
+  <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
+  <title>安装说明 - Markdown Writing</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="./styles.css?v=20260919-3">
+</head>
+<body class="docs-page install-page" data-page="install">
+  <a class="skip-link" href="#main-content" data-i18n="skip.link">跳到主要内容</a>
+  <header class="site-header scrolled" id="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="./index.html#top" aria-label="Markdown Writing">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
+        <span>Markdown Writing</span>
+      </a>
+      <nav class="desktop-nav" aria-label="主导航">
+        <a href="./index.html#workflow" data-i18n="nav.workflow">工作流</a>
+        <a href="./index.html#capabilities" data-i18n="nav.capabilities">能力</a>
+        <a href="./index.html#themes" data-i18n="nav.themes">主题</a>
+        <a href="./docs.html" data-i18n="nav.safety">可靠性</a>
+        <a href="./updates.html" data-i18n="nav.updates">更新记录</a>
+        <a href="./download.html" data-i18n="action.download">下载</a>
+      </nav>
+      <div class="nav-actions">
+        <div class="language-switch" role="group" data-i18n-aria-label="lang.label" aria-label="界面语言">
+          <button type="button" data-language="zh" aria-pressed="true">中</button>
+          <button type="button" data-language="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="button button-small button-primary" href="./index.html#download">
+          <i data-lucide="download"></i>
+          <span data-i18n="action.download">下载</span>
+        </a>
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+    </div>
+    <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
+      <div class="mobile-language">
+        <button type="button" data-language="zh">中文</button>
+        <button type="button" data-language="en">English</button>
+      </div>
+      <a href="./index.html#workflow" data-i18n="nav.workflow">工作流</a>
+      <a href="./index.html#capabilities" data-i18n="nav.capabilities">能力</a>
+      <a href="./index.html#themes" data-i18n="nav.themes">主题</a>
+      <a href="./docs.html" data-i18n="nav.safety">可靠性</a>
+      <a href="./updates.html" data-i18n="nav.updates">更新记录</a>
+      <a href="./download.html" data-i18n="action.download">下载</a>
+      <a href="./index.html#download" data-i18n="action.downloadMac">下载 macOS</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="docs-hero install-hero">
+      <div class="section-shell">
+        <span class="eyebrow" data-i18n="install.heroEyebrow">macOS installation</span>
+        <h1 data-i18n="install.heroTitle">安装 Markdown Writing</h1>
+        <p data-i18n="install.heroLead">当前版本仅面向 Apple Silicon Mac。按照以下步骤下载、安装并完成首次启动。</p>
+      </div>
+    </section>
+
+    <div class="section-shell docs-layout install-layout">
+      <aside class="docs-sidebar" aria-label="Installation navigation">
+        <strong data-i18n="install.heroEyebrow">macOS installation</strong>
+        <a href="#requirements" data-i18n="install.nav.requirements">系统要求</a>
+        <a href="#steps" data-i18n="install.nav.steps">安装步骤</a>
+        <a href="#first-run" data-i18n="install.nav.firstRun">首次启动</a>
+        <a href="#updates" data-i18n="install.nav.updates">后续更新</a>
+        <a href="#troubleshooting" data-i18n="install.nav.troubleshooting">故障排查</a>
+      </aside>
+
+      <article class="docs-content">
+        <section class="docs-section" id="requirements">
+          <h2 data-i18n="install.requirements.title">系统要求</h2>
+          <p data-i18n="install.requirements.body">下载前请确认设备符合要求。目前不提供 Intel Mac、Windows 或 Linux 版本。</p>
+          <div class="install-requirement-grid">
+            <article>
+              <i data-lucide="cpu"></i>
+              <strong data-i18n="install.requirements.cpu">Apple Silicon 芯片</strong>
+              <p data-i18n="install.requirements.cpuBody">支持 M1、M2、M3、M4 及后续 M 系列芯片。</p>
+            </article>
+            <article>
+              <i data-lucide="laptop"></i>
+              <strong data-i18n="install.requirements.os">macOS</strong>
+              <p data-i18n="install.requirements.osBody">使用当前受支持的 macOS 版本，并保持系统更新。</p>
+            </article>
+            <article>
+              <i data-lucide="shield-alert"></i>
+              <strong data-i18n="install.requirements.signing">未签名构建</strong>
+              <p data-i18n="install.requirements.signingBody">首次打开时，macOS 可能要求你在系统设置中确认。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="docs-section" id="steps">
+          <h2 data-i18n="install.steps.title">安装步骤</h2>
+          <div class="install-steps">
+            <article class="install-step">
+              <span>01</span>
+              <div>
+                <strong data-i18n="install.steps.step1Title">下载安装包</strong>
+                <p data-i18n="install.steps.step1Body">从官网或 GitHub Releases 下载文件名包含 arm64 或 apple-silicon 的版本。</p>
+              </div>
+            </article>
+            <article class="install-step">
+              <span>02</span>
+              <div>
+                <strong data-i18n="install.steps.step2Title">解压或打开 DMG</strong>
+                <p data-i18n="install.steps.step2Body">如果下载的是 ZIP，请先解压；如果下载的是 DMG，请双击打开。</p>
+              </div>
+            </article>
+            <article class="install-step">
+              <span>03</span>
+              <div>
+                <strong data-i18n="install.steps.step3Title">移动到应用程序</strong>
+                <p data-i18n="install.steps.step3Body">将 Markdown Writing 拖入“应用程序”文件夹，再从该位置启动。</p>
+              </div>
+            </article>
+            <article class="install-step">
+              <span>04</span>
+              <div>
+                <strong data-i18n="install.steps.step4Title">确认首次启动</strong>
+                <p data-i18n="install.steps.step4Body">如果系统阻止打开，请在“系统设置 → 隐私与安全性”中允许本次打开。</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="docs-section" id="first-run">
+          <h2 data-i18n="install.firstRun.title">首次启动</h2>
+          <p data-i18n="install.firstRun.body">第一次启动不需要登录，也不会要求上传文档。你可以打开本地文件夹，或先创建一篇新文档。</p>
+          <div class="docs-callout">
+            <strong data-i18n="install.firstRun.noteTitle">关于“未验证的开发者”</strong>
+            <p data-i18n="install.firstRun.noteBody">这是未签名构建可能出现的提示。只应从项目官网或官方 GitHub Releases 下载安装包。</p>
+          </div>
+        </section>
+
+        <section class="docs-section" id="updates">
+          <h2 data-i18n="install.updates.title">后续更新</h2>
+          <p data-i18n="install.updates.body">应用内的设置页可以检查版本。官网更新记录会同步 GitHub Releases 的版本和说明。</p>
+          <div class="install-actions">
+            <a class="button button-primary" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
+              <i data-lucide="download"></i>
+              <span data-i18n="install.action.openReleases">打开 GitHub Releases</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="docs-section" id="troubleshooting">
+          <h2 data-i18n="install.troubleshooting.title">故障排查</h2>
+          <ul>
+            <li data-i18n="install.troubleshooting.item1">如果提示“应用已损坏”，请重新下载，并确认解压后的应用位于“应用程序”目录。</li>
+            <li data-i18n="install.troubleshooting.item2">如果应用无法打开，请确认设备使用 Apple Silicon，而不是 Intel 处理器。</li>
+            <li data-i18n="install.troubleshooting.item3">问题持续存在时，请在 GitHub Issues 中附上 macOS 版本、芯片型号和完整提示。</li>
+          </ul>
+          <div class="install-actions">
+            <a class="button button-secondary" href="https://github.com/smartartian/Markdown-writing/issues" target="_blank" rel="noreferrer">
+              <i data-lucide="message-circle-warning"></i>
+              <span data-i18n="install.action.openIssues">查看 GitHub Issues</span>
+            </a>
+          </div>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-shell footer-inner">
+      <a class="brand" href="./index.html#top">
+        <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
+        <span>Markdown Writing</span>
+      </a>
+      <p data-i18n="footer.tagline">本地优先的 macOS Markdown 桌面写作工具。</p>
+      <span id="copyright-year"></span>
+    </div>
+  </footer>
+
+  <script src="./vendor/lucide.min.js?v=20260919-3"></script>
+  <script type="module" src="./install.js?v=20260919-3"></script>
+</body>
+</html>

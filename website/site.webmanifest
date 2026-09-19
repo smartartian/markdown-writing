@@ -4,8 +4,8 @@
   "description": "本地优先的 Markdown 桌面写作工具",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f5f2ec",
-  "theme_color": "#f5f2ec",
+  "background_color": "#eef1ef",
+  "theme_color": "#eef1ef",
   "icons": [
     {
       "src": "./assets/logo-64.png",

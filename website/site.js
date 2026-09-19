@@ -1,3 +1,5 @@
+import { initI18n } from './i18n.js';
+
 export function renderIcons() {
   const lucideApi = window.lucide || globalThis.lucide;
   if (lucideApi) lucideApi.createIcons();
@@ -31,6 +33,7 @@ function listenForMediaChange(query, listener) {
 }
 
 export function initSiteShell({ solidHeader = false } = {}) {
+  initI18n();
   const header = document.querySelector('#site-header');
   const mobileMenuButton = document.querySelector('#mobile-menu-button');
   const mobileNav = document.querySelector('#mobile-nav');

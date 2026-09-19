@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d1110">
+  <title>官网风格预览 | Markdown Writing</title>
+  <style>
+    :root {
+      --site-ink: #17201f;
+      --site-muted: #5f6d6a;
+      --site-line: rgba(23, 32, 31, 0.14);
+      --site-line-strong: rgba(23, 32, 31, 0.24);
+      --site-bg: #eef1ef;
+      --site-surface: #f8faf8;
+      --site-blue: #2457e6;
+      --site-blue-soft: #e7edff;
+      --site-green: #147b63;
+      --site-green-soft: #dff2ec;
+      --site-orange: #d56c31;
+      --site-orange-soft: #fde9dc;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
+      --sans: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      --mono: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      --app-bg-page: #f2f2f5;
+      --app-surface: #ffffff;
+      --app-surface-secondary: #f5f5f8;
+      --app-sidebar: #ffffff;
+      --app-sidebar-hover: rgba(92, 137, 242, 0.08);
+      --app-sidebar-active: #5c89f2;
+      --app-foreground: #2c2e33;
+      --app-heading: #1a1c20;
+      --app-secondary: #5a5c62;
+      --app-muted: #8e9098;
+      --app-border: #e2e2e6;
+      --app-divider: #e8e8ec;
+      --app-primary: #5c89f2;
+      --app-primary-soft: rgba(92, 137, 242, 0.1);
+      --app-success: #5ca85c;
+      --app-shadow: 0 30px 80px rgba(16, 28, 25, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--site-ink);
+      background:
+        linear-gradient(rgba(23, 32, 31, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(23, 32, 31, 0.035) 1px, transparent 1px),
+        var(--site-bg);
+      background-size: 32px 32px;
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button {
+      color: inherit;
+      font: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    svg {
+      width: 1em;
+      height: 1em;
+      stroke-width: 1.8;
+    }
+
+    .site-shell {
+      width: min(1240px, calc(100% - 48px));
+      margin: 0 auto;
+    }
+
+    .site-header {
+      position: sticky;
+      z-index: 20;
+      top: 0;
+      border-bottom: 1px solid rgba(23, 32, 31, 0.09);
+      background: rgba(238, 241, 239, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .nav-shell {
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 720;
+      letter-spacing: -0.025em;
+    }
+
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--site-line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      color: var(--site-muted);
+      font-size: 14px;
+    }
+
+    .nav-links a:hover {
+      color: var(--site-ink);
+    }
+
+    .button {
+      min-height: 44px;
+      padding: 0 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 680;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .button-primary {
+      color: #fff;
+      background: var(--site-ink);
+    }
+
+    .button-primary:hover {
+      background: #273432;
+    }
+
+    .button-secondary {
+      border-color: var(--site-line-strong);
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .hero {
+      padding: 84px 0 78px;
+    }
+
+    .hero-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(420px, 1.15fr);
+      align-items: end;
+      gap: 72px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--site-green);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 22px;
+      height: 1px;
+      content: "";
+      background: currentColor;
+    }
+
+    h1 {
+      margin: 18px 0 20px;
+      font-size: clamp(50px, 6vw, 82px);
+      line-height: 0.98;
+      letter-spacing: -0.06em;
+    }
+
+    .hero-copy p {
+      max-width: 590px;
+      margin: 0;
+      color: var(--site-muted);
+      font-size: 18px;
+      line-height: 1.8;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .hero-note {
+      padding: 0 0 5px 28px;
+      border-left: 1px solid var(--site-line-strong);
+    }
+
+    .hero-note strong {
+      display: block;
+      font-family: var(--serif);
+      font-size: 24px;
+      line-height: 1.45;
+    }
+
+    .hero-note span {
+      display: block;
+      margin-top: 12px;
+      color: var(--site-muted);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .preview-toolbar {
+      margin-top: 44px;
+      padding: 13px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border: 1px solid var(--site-line);
+      border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+      background: rgba(248, 250, 248, 0.92);
+    }
+
+    .preview-toolbar-label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--site-muted);
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--site-green);
+      box-shadow: 0 0 0 4px rgba(20, 123, 99, 0.11);
+    }
+
+    .theme-controls,
+    .mode-control {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .theme-choice,
+    .mode-choice {
+      min-height: 34px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--site-muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .theme-choice:hover,
+    .mode-choice:hover {
+      color: var(--site-ink);
+      background: rgba(23, 32, 31, 0.05);
+    }
+
+    .theme-choice.active,
+    .mode-choice.active {
+      color: var(--site-ink);
+      border-color: var(--site-line);
+      background: #fff;
+      box-shadow: 0 2px 10px rgba(23, 32, 31, 0.06);
+    }
+
+    .theme-swatch {
+      width: 13px;
+      height: 13px;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: var(--swatch);
+      box-shadow: 0 0 0 1px var(--site-line-strong);
+    }
+
+    .mode-control {
+      padding-left: 8px;
+      border-left: 1px solid var(--site-line);
+    }
+
+    .workspace-frame {
+      overflow: hidden;
+      border: 1px solid rgba(18, 27, 25, 0.22);
+      border-radius: 0 0 8px 8px;
+      color: var(--app-foreground);
+      background: var(--app-bg-page);
+      box-shadow: var(--app-shadow);
+      transition: background 220ms ease, color 220ms ease;
+    }
+
+    .window-bar {
+      height: 43px;
+      padding: 0 14px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      border-bottom: 1px solid var(--app-border);
+      background: var(--app-surface);
+      color: var(--app-muted);
+      font-size: 11px;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+    }
+
+    .traffic-lights i {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #d6d7db;
+    }
+
+    .traffic-lights i:first-child { background: #e68478; }
+    .traffic-lights i:nth-child(2) { background: #dfb35f; }
+    .traffic-lights i:nth-child(3) { background: #75b983; }
+
+    .window-title {
+      color: var(--app-secondary);
+      font-weight: 600;
+    }
+
+    .window-meta {
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--app-success);
+    }
+
+    .workspace-body {
+      min-height: 590px;
+      display: grid;
+      grid-template-columns: 224px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--app-border);
+      background: var(--app-sidebar);
+    }
+
+    .sidebar-brand {
+      padding: 0 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--app-heading);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .sidebar-brand img {
+      width: 25px;
+      height: 25px;
+      border-radius: 6px;
+    }
+
+    .sidebar-nav {
+      display: grid;
+      gap: 3px;
+    }
+
+    .sidebar-nav button {
+      width: 100%;
+      min-height: 34px;
+      padding: 0 9px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--app-secondary);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .sidebar-nav button.active {
+      color: var(--app-sidebar-active);
+      background: var(--app-sidebar-hover);
+      font-weight: 650;
+    }
+
+    .sidebar-section {
+      margin-top: 20px;
+      padding: 0 9px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--app-muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .file-list {
+      margin-top: 8px;
+      display: grid;
+      gap: 2px;
+    }
+
+    .file-item {
+      min-height: 32px;
+      padding: 0 9px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 6px;
+      color: var(--app-secondary);
+      font-size: 12px;
+    }
+
+    .file-item.active {
+      color: var(--app-foreground);
+      background: var(--app-sidebar-hover);
+    }
+
+    .file-item svg {
+      color: var(--app-muted);
+    }
+
+    .file-item.active svg {
+      color: var(--app-primary);
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--app-divider);
+    }
+
+    .editor {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--app-bg-page);
+    }
+
+    .editor-toolbar {
+      min-height: 58px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--app-border);
+      background: var(--app-surface);
+    }
+
+    .document-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .document-title svg {
+      color: var(--app-primary);
+    }
+
+    .document-title strong,
+    .document-title small {
+      display: block;
+    }
+
+    .document-title strong {
+      font-size: 13px;
+    }
+
+    .document-title small {
+      margin-top: 2px;
+      color: var(--app-muted);
+      font-size: 10px;
+    }
+
+    .editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .icon-button {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      color: var(--app-secondary);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .icon-button:hover {
+      color: var(--app-foreground);
+      background: var(--app-surface-secondary);
+    }
+
+    .editor-scroll {
+      position: relative;
+      flex: 1;
+      padding: 42px 42px 54px;
+      overflow: hidden;
+    }
+
+    .paper {
+      width: min(720px, 100%);
+      min-height: 100%;
+      margin: 0 auto;
+      padding: 48px 58px 60px;
+      border: 1px solid var(--app-border);
+      background: var(--app-surface);
+      box-shadow: 0 16px 46px rgba(20, 26, 24, 0.06);
+      transition: background 220ms ease, border-color 220ms ease;
+    }
+
+    .paper-kicker {
+      color: var(--app-primary);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .paper h2 {
+      margin: 15px 0 16px;
+      color: var(--app-heading);
+      font-family: var(--serif);
+      font-size: 35px;
+      line-height: 1.24;
+      letter-spacing: -0.035em;
+    }
+
+    .paper > p {
+      margin: 0;
+      color: var(--app-secondary);
+      font-size: 14px;
+      line-height: 1.95;
+    }
+
+    .paper blockquote {
+      margin: 24px 0;
+      padding: 12px 0 12px 17px;
+      border-left: 2px solid var(--app-primary);
+      color: var(--app-secondary);
+      font-family: var(--serif);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .task-list {
+      margin: 24px 0;
+      padding: 0;
+      display: grid;
+      gap: 9px;
+      list-style: none;
+      color: var(--app-secondary);
+      font-size: 13px;
+    }
+
+    .task-list li {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .task-list i {
+      width: 15px;
+      height: 15px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--app-border);
+      border-radius: 4px;
+      color: #fff;
+      background: var(--app-surface);
+      font-style: normal;
+      font-size: 10px;
+    }
+
+    .task-list li.done i {
+      border-color: var(--app-success);
+      background: var(--app-success);
+    }
+
+    .code-card {
+      margin-top: 28px;
+      overflow: hidden;
+      border: 1px solid var(--app-border);
+      border-radius: 7px;
+      background: var(--app-surface-secondary);
+    }
+
+    .code-head {
+      min-height: 34px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--app-border);
+      color: var(--app-muted);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .code-card pre {
+      margin: 0;
+      padding: 14px;
+      color: var(--app-secondary);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.75;
+    }
+
+    .find-panel {
+      position: absolute;
+      z-index: 3;
+      top: 24px;
+      right: 22px;
+      width: 310px;
+      padding: 10px;
+      border: 1px solid var(--app-border);
+      border-radius: 8px;
+      background: var(--app-surface);
+      box-shadow: 0 14px 38px rgba(20, 26, 24, 0.14);
+    }
+
+    .find-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto 28px 28px;
+      gap: 5px;
+    }
+
+    .find-row input {
+      min-width: 0;
+      height: 30px;
+      padding: 0 9px;
+      border: 1px solid var(--app-border);
+      border-radius: 5px;
+      color: var(--app-foreground);
+      background: var(--app-surface-secondary);
+      font: 11px var(--sans);
+      outline: none;
+    }
+
+    .find-row input:focus {
+      border-color: var(--app-primary);
+    }
+
+    .find-count {
+      align-self: center;
+      color: var(--app-muted);
+      font: 9px var(--mono);
+    }
+
+    .mini-icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 5px;
+      color: var(--app-secondary);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .mini-icon:hover {
+      background: var(--app-surface-secondary);
+    }
+
+    .find-case {
+      display: grid;
+      place-items: center;
+      color: var(--app-primary);
+      font: 700 10px var(--mono);
+    }
+
+    .editor-status {
+      min-height: 34px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--app-border);
+      color: var(--app-muted);
+      background: var(--app-surface);
+      font-size: 10px;
+    }
+
+    .editor-status span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .feature-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--site-line);
+      border-bottom: 1px solid var(--site-line);
+    }
+
+    .feature {
+      min-height: 150px;
+      padding: 30px;
+    }
+
+    .feature + .feature {
+      border-left: 1px solid var(--site-line);
+    }
+
+    .feature svg {
+      color: var(--site-blue);
+      font-size: 20px;
+    }
+
+    .feature:nth-child(2) svg { color: var(--site-green); }
+    .feature:nth-child(3) svg { color: var(--site-orange); }
+
+    .feature h3 {
+      margin: 22px 0 8px;
+      font-size: 16px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--site-muted);
+      font-size: 13px;
+      line-height: 1.75;
+    }
+
+    .prototype-note {
+      padding: 30px 0 48px;
+      color: var(--site-muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .hero-head {
+        grid-template-columns: 1fr;
+        gap: 34px;
+      }
+
+      .hero-note {
+        max-width: 620px;
+      }
+
+      .preview-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .theme-controls {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .mode-control {
+        margin-left: auto;
+      }
+
+      .workspace-body {
+        grid-template-columns: 190px minmax(0, 1fr);
+      }
+
+      .editor-scroll {
+        padding: 28px 24px 44px;
+      }
+
+      .paper {
+        padding: 38px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .site-shell {
+        width: min(100% - 28px, 1240px);
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 56px;
+      }
+
+      h1 {
+        font-size: 48px;
+      }
+
+      .hero-copy p {
+        font-size: 16px;
+      }
+
+      .preview-toolbar {
+        margin-top: 32px;
+      }
+
+      .theme-choice {
+        padding: 0 8px;
+      }
+
+      .theme-choice span:last-child {
+        display: none;
+      }
+
+      .workspace-body {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        min-height: auto;
+        display: none;
+      }
+
+      .window-bar {
+        grid-template-columns: auto 1fr;
+      }
+
+      .window-title {
+        justify-self: end;
+      }
+
+      .window-meta {
+        display: none;
+      }
+
+      .editor-scroll {
+        padding: 18px 14px 30px;
+      }
+
+      .paper {
+        padding: 30px 24px 40px;
+      }
+
+      .paper h2 {
+        font-size: 29px;
+      }
+
+      .find-panel {
+        top: auto;
+        right: 14px;
+        bottom: 14px;
+        width: calc(100% - 28px);
+      }
+
+      .feature-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .feature {
+        min-height: 0;
+        padding: 26px 0;
+      }
+
+      .feature + .feature {
+        border-top: 1px solid var(--site-line);
+        border-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-shell nav-shell">
+      <a class="brand" href="#top">
+        <img src="./assets/logo-64.png" alt="" width="34" height="34">
+        <span>Markdown Writing</span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#workspace">编辑器</a>
+        <a href="#themes">主题</a>
+        <a href="#reliability">可靠性</a>
+        <a href="#download">更新</a>
+      </nav>
+      <a class="button button-primary" href="#download">
+        <i data-lucide="download"></i>
+        下载 macOS
+      </a>
+    </div>
+  </header>
+
+  <main class="site-shell" id="top">
+    <section class="hero" id="workspace">
+      <div class="hero-head">
+        <div class="hero-copy">
+          <span class="eyebrow">Local-first writing workspace</span>
+          <h1>Markdown<br>Writing</h1>
+          <p>本地优先的 Markdown 桌面写作工具。文件留在磁盘，内容、版本、主题和扩展能力都保持清晰可控。</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#download">
+              <i data-lucide="monitor-down"></i>
+              下载 Apple Silicon 版
+            </a>
+            <a class="button button-secondary" href="#themes">
+              查看主题效果
+              <i data-lucide="arrow-down"></i>
+            </a>
+          </div>
+        </div>
+        <div class="hero-note">
+          <strong>把编辑、保存、恢复和导出放进同一个安静的工作台。</strong>
+          <span>当前预览使用与桌面端一致的主题令牌。切换主题时，工作区、侧栏、正文和状态栏会同步变化。</span>
+        </div>
+      </div>
+
+      <div class="preview-toolbar" id="themes">
+        <div class="preview-toolbar-label">
+          <span class="status-dot"></span>
+          <span>交互预览 · <strong id="theme-summary">纸张 / 亮色</strong></span>
+        </div>
+        <div class="theme-controls" aria-label="主题切换">
+          <button class="theme-choice active" type="button" data-theme="paper">
+            <span class="theme-swatch" style="--swatch:#5c89f2"></span>
+            <span>纸张</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="sepia">
+            <span class="theme-swatch" style="--swatch:#9a6b2f"></span>
+            <span>书页米黄</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="graphite">
+            <span class="theme-swatch" style="--swatch:#3f474e"></span>
+            <span>石墨</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="ocean">
+            <span class="theme-swatch" style="--swatch:#247096"></span>
+            <span>深海</span>
+          </button>
+          <div class="mode-control" aria-label="亮暗模式">
+            <button class="mode-choice active" type="button" data-mode="light" title="亮色模式">
+              <i data-lucide="sun"></i>
+            </button>
+            <button class="mode-choice" type="button" data-mode="dark" title="暗色模式">
+              <i data-lucide="moon"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="workspace-frame" id="app-preview">
+        <div class="window-bar">
+          <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="window-title">写作计划.md</span>
+          <span class="window-meta"><i data-lucide="hard-drive"></i>本地已保存</span>
+        </div>
+
+        <div class="workspace-body">
+          <aside class="sidebar">
+            <div class="sidebar-brand">
+              <img src="./assets/logo-64.png" alt="">
+              <span>Markdown Writing</span>
+            </div>
+            <nav class="sidebar-nav" aria-label="工作区导航">
+              <button class="active" type="button"><i data-lucide="folder"></i>文件</button>
+              <button type="button"><i data-lucide="list"></i>大纲</button>
+            </nav>
+            <div class="sidebar-section">
+              <span>Files</span>
+              <i data-lucide="search"></i>
+            </div>
+            <div class="file-list">
+              <div class="file-item"><i data-lucide="folder-open"></i>docs</div>
+              <div class="file-item active"><i data-lucide="file-text"></i>写作计划.md</div>
+              <div class="file-item"><i data-lucide="file-text"></i>产品手记.md</div>
+              <div class="file-item"><i data-lucide="file-text"></i>发布说明.md</div>
+            </div>
+            <nav class="sidebar-nav sidebar-footer" aria-label="应用设置">
+              <button type="button"><i data-lucide="settings"></i>设置</button>
+            </nav>
+          </aside>
+
+          <section class="editor">
+            <header class="editor-toolbar">
+              <div class="document-title">
+                <i data-lucide="file-text"></i>
+                <span><strong>写作计划.md</strong><small>本地文件 · 自动保存</small></span>
+              </div>
+              <div class="editor-actions">
+                <button class="icon-button" type="button" title="查找"><i data-lucide="search"></i></button>
+                <button class="icon-button" type="button" title="版本历史"><i data-lucide="history"></i></button>
+                <button class="icon-button" type="button" title="导出"><i data-lucide="download"></i></button>
+              </div>
+            </header>
+
+            <div class="editor-scroll">
+              <article class="paper">
+                <span class="paper-kicker">Today / 2026.09.19</span>
+                <h2>把注意力留给正在发生的句子</h2>
+                <p>写作应当接近纸面：打开即写，内容留存在本地。需要时再切换源码、恢复历史版本，或导出成适合分享的格式。</p>
+                <blockquote>没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。</blockquote>
+                <ul class="task-list">
+                  <li class="done"><i>✓</i>完成块编辑器改造</li>
+                  <li class="done"><i>✓</i>补齐主题与亮暗模式</li>
+                  <li><i></i>生成官网交互原型</li>
+                </ul>
+                <div class="code-card">
+                  <div class="code-head"><span>today.md</span><span>Markdown Core</span></div>
+                  <pre>## 今日写作
+
+- 保持本地文件为唯一事实来源
+- 保存、版本与恢复共享同一条链路
+- 让主题跟随写作环境自然切换</pre>
+                </div>
+              </article>
+
+              <div class="find-panel" aria-label="查找替换预览">
+                <div class="find-row">
+                  <span class="find-case">Aa</span>
+                  <input type="text" value="保存" aria-label="查找内容">
+                  <span class="find-count">1 / 4</span>
+                  <button class="mini-icon" type="button" title="上一个"><i data-lucide="chevron-up"></i></button>
+                  <button class="mini-icon" type="button" title="下一个"><i data-lucide="chevron-down"></i></button>
+                </div>
+              </div>
+            </div>
+
+            <footer class="editor-status">
+              <span><i data-lucide="eye"></i>预览模式</span>
+              <span>行 12 · 字数 638</span>
+            </footer>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature-strip" id="reliability">
+      <article class="feature">
+        <i data-lucide="file-check-2"></i>
+        <h3>写入可验证</h3>
+        <p>Revision 校验与原子替换，让自动保存和手动保存共享同一条可靠链路。</p>
+      </article>
+      <article class="feature">
+        <i data-lucide="history"></i>
+        <h3>历史可恢复</h3>
+        <p>版本历史、回收站和崩溃恢复快照覆盖误操作与异常退出场景。</p>
+      </article>
+      <article class="feature">
+        <i data-lucide="blocks"></i>
+        <h3>能力可扩展</h3>
+        <p>插件运行状态、依赖关系和管理操作都在设置工作台中清晰呈现。</p>
+      </article>
+    </section>
+
+    <p class="prototype-note">这是视觉方向预览页，尚未替换正式官网内容。</p>
+  </main>
+
+  <script src="./vendor/lucide.min.js"></script>
+  <script>
+    const themes = {
+      paper: {
+        light: {
+          page: '#f2f2f5', surface: '#ffffff', secondarySurface: '#f5f5f8', sidebar: '#ffffff',
+          hover: 'rgba(92,137,242,0.08)', active: '#5c89f2', foreground: '#2c2e33', heading: '#1a1c20',
+          secondary: '#5a5c62', muted: '#8e9098', border: '#e2e2e6', divider: '#e8e8ec',
+          primary: '#5c89f2', primarySoft: 'rgba(92,137,242,0.10)', success: '#5ca85c'
+        },
+        dark: {
+          page: '#1e1f22', surface: '#24262a', secondarySurface: '#2a2c30', sidebar: '#1a1b1e',
+          hover: 'rgba(255,255,255,0.06)', active: '#79a0ff', foreground: '#e6e6ea', heading: '#ffffff',
+          secondary: '#b6b8c0', muted: '#8f9098', border: '#34363b', divider: '#2f3136',
+          primary: '#79a0ff', primarySoft: 'rgba(121,160,255,0.14)', success: '#72c982'
+        }
+      },
+      sepia: {
+        light: {
+          page: '#f6efe1', surface: '#fbf5e6', secondarySurface: '#f0e8d3', sidebar: '#fbf5e6',
+          hover: 'rgba(146,106,48,0.09)', active: '#9a6b2f', foreground: '#3a3126', heading: '#241d14',
+          secondary: '#6b5e46', muted: '#8c7c5f', border: '#e0d3b5', divider: '#e8dcc0',
+          primary: '#9a6b2f', primarySoft: 'rgba(154,107,47,0.12)', success: '#6c8c51'
+        },
+        dark: {
+          page: '#211d18', surface: '#2a251f', secondarySurface: '#332d26', sidebar: '#1b1814',
+          hover: 'rgba(224,190,132,0.09)', active: '#d1a66b', foreground: '#eee4d3', heading: '#fff7e9',
+          secondary: '#c8b9a1', muted: '#a69783', border: '#494037', divider: '#3d352e',
+          primary: '#d1a66b', primarySoft: 'rgba(209,166,107,0.15)', success: '#8fb27a'
+        }
+      },
+      graphite: {
+        light: {
+          page: '#f1f2f3', surface: '#fafafa', secondarySurface: '#eceeef', sidebar: '#fafafa',
+          hover: 'rgba(55,61,66,0.08)', active: '#3f474e', foreground: '#282d31', heading: '#15191c',
+          secondary: '#565e64', muted: '#7d858b', border: '#d9dde0', divider: '#e2e5e7',
+          primary: '#3f474e', primarySoft: 'rgba(63,71,78,0.10)', success: '#5f8b67'
+        },
+        dark: {
+          page: '#17191b', surface: '#202326', secondarySurface: '#292d31', sidebar: '#131517',
+          hover: 'rgba(255,255,255,0.07)', active: '#aeb7bf', foreground: '#e2e6e9', heading: '#f7f9fa',
+          secondary: '#b3bbc1', muted: '#8e969d', border: '#363b40', divider: '#2d3236',
+          primary: '#aeb7bf', primarySoft: 'rgba(174,183,191,0.14)', success: '#87b08e'
+        }
+      },
+      ocean: {
+        light: {
+          page: '#eef4f7', surface: '#f9fcfd', secondarySurface: '#e5eef3', sidebar: '#f9fcfd',
+          hover: 'rgba(36,112,150,0.09)', active: '#247096', foreground: '#20343d', heading: '#10262f',
+          secondary: '#4e6873', muted: '#738b96', border: '#cddde4', divider: '#dce8ed',
+          primary: '#247096', primarySoft: 'rgba(36,112,150,0.11)', success: '#4c8a70'
+        },
+        dark: {
+          page: '#111b20', surface: '#18262d', secondarySurface: '#20323b', sidebar: '#0d171c',
+          hover: 'rgba(128,205,235,0.08)', active: '#76c3e4', foreground: '#deedf3', heading: '#f4fbfe',
+          secondary: '#afc6d0', muted: '#87a2ae', border: '#304852', divider: '#273d46',
+          primary: '#76c3e4', primarySoft: 'rgba(118,195,228,0.15)', success: '#7bc09d'
+        }
+      }
+    };
+
+    const themeNames = {
+      paper: '纸张',
+      sepia: '书页米黄',
+      graphite: '石墨',
+      ocean: '深海'
+    };
+
+    let activeTheme = 'paper';
+    let activeMode = 'light';
+
+    function applyPreviewTheme() {
+      const preview = document.querySelector('#app-preview');
+      const tokens = themes[activeTheme][activeMode];
+      const variables = {
+        '--app-bg-page': tokens.page,
+        '--app-surface': tokens.surface,
+        '--app-surface-secondary': tokens.secondarySurface,
+        '--app-sidebar': tokens.sidebar,
+        '--app-sidebar-hover': tokens.hover,
+        '--app-sidebar-active': tokens.active,
+        '--app-foreground': tokens.foreground,
+        '--app-heading': tokens.heading,
+        '--app-secondary': tokens.secondary,
+        '--app-muted': tokens.muted,
+        '--app-border': tokens.border,
+        '--app-divider': tokens.divider,
+        '--app-primary': tokens.primary,
+        '--app-primary-soft': tokens.primarySoft,
+        '--app-success': tokens.success,
+        '--app-shadow': activeMode === 'dark'
+          ? '0 30px 90px rgba(0,0,0,0.42)'
+          : '0 30px 80px rgba(16,28,25,0.18)'
+      };
+
+      Object.entries(variables).forEach(([name, value]) => {
+        preview.style.setProperty(name, value);
+      });
+      document.querySelector('#theme-summary').textContent =
+        `${themeNames[activeTheme]} / ${activeMode === 'dark' ? '暗色' : '亮色'}`;
+    }
+
+    document.querySelectorAll('[data-theme]').forEach(button => {
+      button.addEventListener('click', () => {
+        activeTheme = button.dataset.theme;
+        document.querySelectorAll('[data-theme]').forEach(item => {
+          item.classList.toggle('active', item === button);
+        });
+        applyPreviewTheme();
+      });
+    });
+
+    document.querySelectorAll('[data-mode]').forEach(button => {
+      button.addEventListener('click', () => {
+        activeMode = button.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(item => {
+          item.classList.toggle('active', item === button);
+        });
+        applyPreviewTheme();
+      });
+    });
+
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+    applyPreviewTheme();
+  </script>
+</body>
+</html>

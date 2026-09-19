@@ -3,47 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Markdown Writing 是一个本地优先的 Markdown 桌面写作工具，文档留在磁盘，打开即写，导出无忧。">
-  <meta name="theme-color" content="#f5f2ec">
+  <meta name="description" content="面向 macOS Apple Silicon 的本地优先 Markdown 桌面写作工具，提供可靠保存、版本恢复、主题系统与插件管理。">
+  <meta name="theme-color" content="#eef1ef">
   <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/">
+  <link rel="alternate" hreflang="zh-CN" href="https://smartartian.github.io/Markdown-writing/?lang=zh-CN">
+  <link rel="alternate" hreflang="en" href="https://smartartian.github.io/Markdown-writing/?lang=en">
+  <link rel="alternate" hreflang="x-default" href="https://smartartian.github.io/Markdown-writing/">
   <link rel="icon" type="image/png" href="./assets/logo-64.png">
   <link rel="apple-touch-icon" href="./assets/logo-128.png">
   <link rel="manifest" href="./site.webmanifest">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Markdown Writing">
   <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/">
-  <meta property="og:title" content="Markdown Writing - 把写作留给文字">
-  <meta property="og:description" content="本地优先、稳定保存、Markdown 原生。文档留在磁盘，打开即写。">
+  <meta property="og:title" content="Markdown Writing - 本地优先的 Markdown 桌面写作工具">
+  <meta property="og:description" content="面向 macOS Apple Silicon 的本地优先写作工作台。">
   <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <meta property="og:locale" content="zh_CN">
+  <meta property="og:locale:alternate" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Markdown Writing - 把写作留给文字">
-  <meta name="twitter:description" content="本地优先的 Markdown 桌面写作工具。">
+  <meta name="twitter:title" content="Markdown Writing">
+  <meta name="twitter:description" content="面向 macOS Apple Silicon 的本地优先写作工作台。">
   <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
-  <title>Markdown Writing - 把写作留给文字</title>
+  <title>Markdown Writing - 本地优先的 Markdown 桌面写作工具</title>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Markdown Writing",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS Apple Silicon",
+      "softwareVersion": "0.0.1",
+      "downloadUrl": "https://github.com/smartartian/Markdown-writing/releases",
+      "codeRepository": "https://github.com/smartartian/Markdown-writing",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  </script>
   <script>document.documentElement.classList.add('js');</script>
-  <link rel="stylesheet" href="./styles.css?v=20260918-6">
+  <link rel="stylesheet" href="./styles.css?v=20260919-3">
 </head>
-<body>
-  <a class="skip-link" href="#main-content">跳到主要内容</a>
+<body data-page="home">
+  <a class="skip-link" href="#main-content" data-i18n="skip.link">跳到主要内容</a>
   <header class="site-header" id="site-header">
     <div class="nav-shell">
-      <a class="brand" href="#top" aria-label="Markdown Writing 首页">
+      <a class="brand" href="#top" aria-label="Markdown Writing">
         <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34">
         <span>Markdown Writing</span>
       </a>
       <nav class="desktop-nav" aria-label="主导航">
-        <a href="#features">功能</a>
-        <a href="#workflow">工作流</a>
-        <a href="#security">数据安全</a>
-        <a href="#export">导出</a>
-        <a href="./updates.html">更新记录</a>
-        <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="#workflow" data-nav-section="workflow" data-i18n="nav.workflow">工作流</a>
+        <a href="#capabilities" data-nav-section="capabilities" data-i18n="nav.capabilities">能力</a>
+        <a href="#themes" data-nav-section="themes" data-i18n="nav.themes">主题</a>
+        <a href="#safety" data-nav-section="safety" data-i18n="nav.safety">可靠性</a>
+        <a href="./updates.html" data-i18n="nav.updates">更新记录</a>
+        <a href="./download.html" data-i18n="action.download">下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-small button-dark" href="#download" data-download-primary>
+        <div class="language-switch" role="group" data-i18n-aria-label="lang.label" aria-label="界面语言">
+          <button type="button" data-language="zh" aria-pressed="true">中</button>
+          <button type="button" data-language="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="button button-small button-primary" href="./download.html">
           <i data-lucide="download"></i>
-          <span data-download-label>下载</span>
+          <span data-download-label data-i18n="action.download">下载</span>
         </a>
         <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="打开导航" aria-controls="mobile-nav" aria-expanded="false">
           <i data-lucide="menu"></i>
@@ -51,282 +76,479 @@
       </div>
     </div>
     <nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
-      <a href="#features">功能</a>
-      <a href="#workflow">工作流</a>
-      <a href="#security">数据安全</a>
-      <a href="#export">导出</a>
-      <a href="./updates.html">更新记录</a>
-      <a href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">GitHub</a>
-      <a href="#download">下载桌面版</a>
+      <div class="mobile-language">
+        <button type="button" data-language="zh">中文</button>
+        <button type="button" data-language="en">English</button>
+      </div>
+      <a href="#workflow" data-i18n="nav.workflow">工作流</a>
+      <a href="#capabilities" data-i18n="nav.capabilities">能力</a>
+      <a href="#themes" data-i18n="nav.themes">主题</a>
+      <a href="#safety" data-i18n="nav.safety">可靠性</a>
+      <a href="./updates.html" data-i18n="nav.updates">更新记录</a>
+      <a href="./download.html" data-i18n="action.download">下载</a>
+      <a href="#download" data-i18n="action.downloadMac">下载 macOS</a>
     </nav>
+    <span class="scroll-progress" aria-hidden="true"><i id="scroll-progress-bar"></i></span>
   </header>
 
   <main id="main-content">
     <span id="top"></span>
     <section class="hero section-shell">
-      <div class="hero-copy reveal">
-        <span class="eyebrow">本地优先的 Markdown 桌面写作工具</span>
-        <h1>把写作，<br>留给文字。</h1>
-        <p>文档留在磁盘，打开即写，格式随文字自然生长。 Markdown Writing 将专注、本地存储和可靠导出放回同一个安静的工作台。</p>
-        <div class="hero-actions">
-          <a class="button button-dark" href="#download" data-download-primary>
-            <i data-lucide="monitor-down"></i>
-            <span data-download-label>获取桌面版</span>
-          </a>
-          <a class="button button-light" href="#features">
-            探索核心功能
-            <i data-lucide="arrow-down"></i>
-          </a>
+      <div class="hero-head">
+        <div class="hero-copy reveal">
+          <span class="eyebrow" data-i18n="home.hero.eyebrow">本地优先的写作工作台</span>
+          <h1>Markdown<br>Writing</h1>
+          <p data-i18n="home.hero.lead">面向 macOS Apple Silicon 的 Markdown 桌面写作工具。文件留在磁盘，内容、版本、主题和扩展能力都保持清晰可控。</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="./download.html">
+              <i data-lucide="monitor-down"></i>
+              <span data-i18n="action.downloadSilicon">下载 Apple Silicon 版</span>
+            </a>
+            <a class="button button-secondary" href="#capabilities">
+              <span data-i18n="action.explore">查看产品能力</span>
+              <i data-lucide="arrow-down"></i>
+            </a>
+          </div>
+          <div class="hero-meta">
+            <span><i data-lucide="hard-drive"></i><span data-i18n="home.meta.local">本地文件</span></span>
+            <span><i data-lucide="shield-check"></i><span data-i18n="home.meta.atomic">原子保存</span></span>
+            <span><i data-lucide="file-code-2"></i><span data-i18n="home.meta.source">源文可控</span></span>
+          </div>
         </div>
-        <div class="hero-meta" aria-label="产品特性">
-          <span><i data-lucide="hard-drive"></i>本地文件</span>
-          <span><i data-lucide="shield-check"></i>原子保存</span>
-          <span><i data-lucide="file-code-2"></i>源文可控</span>
+        <div class="hero-note reveal">
+          <strong data-i18n="home.hero.noteTitle">把编辑、保存、恢复和导出放进同一个安静的工作台。</strong>
+          <span data-i18n="home.hero.noteBody">工作区中的主题令牌与真实桌面端一致。切换主题时，侧栏、正文、浮层和状态栏会同步变化。</span>
         </div>
       </div>
 
-      <div class="product-stage reveal">
-        <div class="stage-glow stage-glow-one"></div>
-        <div class="stage-glow stage-glow-two"></div>
-        <article class="app-window" aria-label="Markdown Writing 应用界面预览">
-          <div class="window-bar">
-            <div class="traffic-lights" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
-            <span class="window-title">Markdown Writing / 写作计划.md</span>
-            <span class="window-mode"><i data-lucide="eye"></i>实时预览</span>
+      <div class="preview-toolbar reveal" id="workflow">
+        <div class="preview-toolbar-label">
+          <span class="status-dot"></span>
+          <span><span data-i18n="preview.kicker">交互预览</span> · <strong id="theme-summary">纸张 / 亮色</strong></span>
+          <span class="preview-hint" id="preview-hint" data-i18n="preview.hint">点击主题、文件或导出按钮体验</span>
+        </div>
+        <div class="theme-controls" aria-label="Theme controls">
+          <button class="theme-choice active" type="button" data-theme="paper">
+            <span class="theme-swatch" style="--swatch:#5c89f2"></span>
+            <span data-i18n="theme.paper">纸张</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="sepia">
+            <span class="theme-swatch" style="--swatch:#9a6b2f"></span>
+            <span data-i18n="theme.sepia">书页米黄</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="graphite">
+            <span class="theme-swatch" style="--swatch:#3f474e"></span>
+            <span data-i18n="theme.graphite">石墨</span>
+          </button>
+          <button class="theme-choice" type="button" data-theme="ocean">
+            <span class="theme-swatch" style="--swatch:#247096"></span>
+            <span data-i18n="theme.ocean">深海</span>
+          </button>
+          <div class="mode-control" aria-label="Light and dark mode">
+            <button class="mode-choice active" type="button" data-mode="light" data-i18n-title="mode.light">
+              <i data-lucide="sun"></i>
+            </button>
+            <button class="mode-choice" type="button" data-mode="dark" data-i18n-title="mode.dark">
+              <i data-lucide="moon"></i>
+            </button>
           </div>
-          <div class="window-body">
-            <aside class="mock-sidebar">
-              <div class="mock-library-title">文档库</div>
-              <div class="mock-tree-item"><i data-lucide="folder-open"></i> essays</div>
-              <div class="mock-tree-item active"><i data-lucide="file-text"></i> 写作计划.md</div>
-              <div class="mock-tree-item"><i data-lucide="file-text"></i> 产品手记.md</div>
-              <div class="mock-tree-item"><i data-lucide="file-text"></i> release-notes.md</div>
-            </aside>
-            <div class="mock-editor">
-              <div class="mock-doc-meta">
-                <span>写作计划.md</span>
-                <span>已保存</span>
+        </div>
+      </div>
+
+      <div class="preview-scenarios reveal" aria-label="Product scenarios">
+        <div class="scenario-heading">
+          <span data-i18n="scenario.title">场景演示</span>
+          <strong id="scenario-current" data-i18n="scenario.open">打开目录</strong>
+        </div>
+        <div class="scenario-steps" role="group">
+          <button class="active" type="button" data-scenario="open"><span>01</span><span data-i18n="scenario.open">打开目录</span></button>
+          <button type="button" data-scenario="write"><span>02</span><span data-i18n="scenario.write">开始写作</span></button>
+          <button type="button" data-scenario="conflict"><span>03</span><span data-i18n="scenario.conflict">处理冲突</span></button>
+          <button type="button" data-scenario="history"><span>04</span><span data-i18n="scenario.history">恢复版本</span></button>
+          <button type="button" data-scenario="export"><span>05</span><span data-i18n="scenario.export">导出交付</span></button>
+        </div>
+        <button class="scenario-next" type="button" data-scenario-next>
+          <span data-i18n="scenario.next">下一步</span>
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </div>
+
+      <div class="workspace-frame reveal" id="app-preview">
+        <div class="window-bar">
+          <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="window-title" data-preview-document-name>写作计划.md</span>
+          <span class="window-meta"><i data-lucide="hard-drive"></i><span data-i18n="preview.saved">本地已保存</span></span>
+        </div>
+        <div class="workspace-body">
+          <aside class="preview-sidebar">
+            <div class="preview-brand">
+              <img src="./assets/logo-64.png" alt="">
+              <span data-i18n="preview.brand">Markdown Writing</span>
+            </div>
+            <nav class="preview-nav" aria-label="Workspace">
+              <button class="active" type="button" data-preview-panel-button="files"><i data-lucide="folder"></i><span data-i18n="preview.files">文件</span></button>
+              <button type="button" data-preview-panel-button="outline"><i data-lucide="list"></i><span data-i18n="preview.outline">大纲</span></button>
+            </nav>
+            <div class="preview-section-title"><span id="preview-panel-label">Files</span><i data-lucide="search"></i></div>
+            <div class="preview-file-list" data-preview-panel="files">
+              <div class="preview-file"><i data-lucide="folder-open"></i><span data-i18n="preview.docs">文档</span></div>
+              <button class="preview-file active" type="button" data-preview-document="plan"><i data-lucide="file-text"></i><span data-i18n="preview.plan">写作计划.md</span></button>
+              <button class="preview-file" type="button" data-preview-document="notes"><i data-lucide="file-text"></i><span data-i18n="preview.notes">产品手记.md</span></button>
+              <button class="preview-file" type="button" data-preview-document="release"><i data-lucide="file-text"></i><span data-i18n="preview.release">发布说明.md</span></button>
+            </div>
+            <div class="preview-outline-list" data-preview-panel="outline" hidden>
+              <button class="preview-outline-item active" type="button" data-outline-target="preview-heading"><span>H1</span><strong data-i18n="preview.outline.h1">项目概览</strong></button>
+              <button class="preview-outline-item" type="button" data-outline-target="preview-subheading"><span>H2</span><strong data-i18n="preview.outline.h2">当前进度</strong></button>
+              <button class="preview-outline-item" type="button" data-outline-target="preview-code"><span>H3</span><strong data-i18n="preview.outline.h3">实现说明</strong></button>
+            </div>
+            <nav class="preview-nav preview-nav-footer" aria-label="Settings">
+              <button type="button" data-preview-action="settings"><i data-lucide="settings"></i><span data-i18n="preview.settings">设置</span></button>
+            </nav>
+          </aside>
+
+          <section class="preview-editor">
+            <header class="preview-toolbar-header">
+              <div class="preview-document">
+                <i data-lucide="file-text"></i>
+                <span>
+                  <strong data-preview-document-name>写作计划.md</strong>
+                  <small data-i18n="preview.documentMeta">本地文件 · 自动保存</small>
+                </span>
               </div>
-              <h2>把注意力留给正在发生的句子</h2>
-              <blockquote>没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。</blockquote>
-              <p>写作应当接近纸面：打开即写，内容留存在本地。需要时再导出为文档、图片或 PDF。</p>
-              <div class="mock-code-card">
-                <div class="mock-code-head">
-                  <span>today.md</span>
-                  <span>Live Preview</span>
+              <div class="preview-actions">
+                <button class="icon-button" type="button" data-preview-action="find" data-i18n-title="preview.find" title="查找"><i data-lucide="search"></i></button>
+                <button class="icon-button" type="button" data-preview-action="history" data-i18n-title="preview.history" title="版本历史"><i data-lucide="history"></i></button>
+                <button class="icon-button" type="button" data-preview-action="export" data-i18n-title="preview.export" title="导出"><i data-lucide="download"></i></button>
+                <button class="icon-button" type="button" data-preview-action="settings" data-i18n-title="preview.settings" title="设置"><i data-lucide="settings"></i></button>
+              </div>
+            </header>
+
+            <div class="preview-conflict" id="preview-conflict" hidden>
+              <span class="preview-conflict-icon"><i data-lucide="triangle-alert"></i></span>
+              <div>
+                <strong data-i18n="preview.conflict.title">检测到外部修改</strong>
+                <p data-i18n="preview.conflict.body">磁盘上的文件已被其他程序修改，请选择重新载入或保留当前内容。</p>
+              </div>
+              <div class="preview-conflict-actions">
+                <button type="button" data-conflict-action="reload" data-i18n="preview.conflict.reload">重新载入</button>
+                <button class="primary" type="button" data-conflict-action="keep" data-i18n="preview.conflict.keep">保留本地</button>
+              </div>
+            </div>
+
+            <aside class="preview-drawer preview-history-drawer" id="preview-history-drawer" hidden aria-label="Version history">
+              <header class="preview-drawer-head">
+                <div>
+                  <span class="preview-drawer-kicker" data-i18n="preview.history.kicker">HISTORY</span>
+                  <strong data-i18n="preview.history.title">版本历史</strong>
                 </div>
-                <pre><code>## 今日写作
+                <button class="mini-icon" type="button" data-preview-action="close" aria-label="Close"><i data-lucide="x"></i></button>
+              </header>
+              <div class="preview-version-list">
+                <article class="preview-version active">
+                  <div><strong data-i18n="preview.history.latest">当前版本</strong><span>20:41</span></div>
+                  <p data-i18n="preview.history.latestBody">保存、版本与恢复共享同一条链路</p>
+                  <button type="button" data-restore-version="12" data-i18n="preview.history.current">当前版本</button>
+                </article>
+                <article class="preview-version">
+                  <div><strong>v11</strong><span>20:36</span></div>
+                  <p data-i18n="preview.history.v11">补齐主题与亮暗模式</p>
+                  <button type="button" data-restore-version="11" data-i18n="preview.history.restore">恢复</button>
+                </article>
+                <article class="preview-version">
+                  <div><strong>v10</strong><span>20:28</span></div>
+                  <p data-i18n="preview.history.v10">完成块编辑器改造</p>
+                  <button type="button" data-restore-version="10" data-i18n="preview.history.restore">恢复</button>
+                </article>
+              </div>
+            </aside>
 
-- [x] 完成官网首屏
-- [ ] 整理发布说明
-</code></pre>
+            <aside class="preview-drawer preview-settings-drawer" id="preview-settings-drawer" hidden aria-label="Settings">
+              <header class="preview-drawer-head">
+                <div>
+                  <span class="preview-drawer-kicker" data-i18n="preview.settings.kicker">SETTINGS</span>
+                  <strong data-i18n="preview.settings.title">设置工作台</strong>
+                </div>
+                <button class="mini-icon" type="button" data-preview-action="close" aria-label="Close"><i data-lucide="x"></i></button>
+              </header>
+              <div class="preview-settings-tabs" role="tablist">
+                <button class="active" type="button" data-settings-tab="system" data-i18n="preview.settings.system">系统</button>
+                <button type="button" data-settings-tab="appearance" data-i18n="preview.settings.appearance">外观</button>
+                <button type="button" data-settings-tab="plugins" data-i18n="preview.settings.plugins">插件</button>
+              </div>
+              <div class="preview-settings-panel" data-settings-panel="system">
+                <div class="preview-setting-row">
+                  <span><strong data-i18n="preview.settings.language">界面语言</strong><small data-i18n="preview.settings.followSystem">跟随系统，可手动切换</small></span>
+                  <em data-i18n="preview.settings.followSystemValue">跟随系统</em>
+                </div>
+                <div class="preview-setting-row">
+                  <span><strong data-i18n="preview.settings.localFiles">本地文件</strong><small data-i18n="preview.settings.localFilesBody">文档保留在原目录</small></span>
+                  <span class="preview-switch on"></span>
+                </div>
+              </div>
+              <div class="preview-settings-panel" data-settings-panel="appearance" hidden>
+                <div class="preview-setting-row">
+                  <span><strong data-i18n="preview.settings.theme">主题模式</strong><small data-i18n="preview.settings.themeBody">亮色与暗色可以独立选择</small></span>
+                  <em data-i18n="preview.settings.systemMode">跟随系统</em>
+                </div>
+                <div class="preview-setting-row">
+                  <span><strong data-i18n="preview.settings.contentWidth">正文宽度</strong><small data-i18n="preview.settings.contentWidthBody">默认百分之七十</small></span>
+                  <span class="preview-range"><i></i></span>
+                </div>
+              </div>
+              <div class="preview-settings-panel" data-settings-panel="plugins" hidden>
+                <div class="preview-plugin-card">
+                  <span class="plugin-status-dot"></span>
+                  <div><strong>Markdown Editor Core</strong><small>markdown-editor-core · v0.0.1</small></div>
+                  <em data-i18n="preview.settings.running">运行中</em>
+                </div>
+                <div class="preview-plugin-card">
+                  <span class="plugin-status-dot protected"></span>
+                  <div><strong>Export Service</strong><small>export-service · v0.0.1</small></div>
+                  <em data-i18n="preview.settings.protected">受保护</em>
+                </div>
+              </div>
+            </aside>
+
+            <div class="preview-export-menu" id="preview-export-menu" hidden>
+              <span class="preview-export-title" data-i18n="preview.export.title">导出当前文档</span>
+              <button type="button" data-export-format="md"><i data-lucide="file-code"></i><span>Markdown</span><small>.md</small></button>
+              <button type="button" data-export-format="txt"><i data-lucide="align-left"></i><span data-i18n="preview.export.text">纯文本</span><small>.txt</small></button>
+              <button type="button" data-export-format="png"><i data-lucide="image"></i><span>PNG</span><small>.png</small></button>
+              <button type="button" data-export-format="pdf"><i data-lucide="file-text"></i><span>PDF</span><small>.pdf</small></button>
+              <button type="button" data-export-format="docx"><i data-lucide="file-type"></i><span data-i18n="preview.export.word">Word 文档</span><small>.doc</small></button>
+            </div>
+
+            <div class="preview-scroll">
+              <article class="preview-paper" data-preview-pane="preview">
+                <span class="paper-kicker" data-i18n="preview.today">今天 / 2026.09.19</span>
+                <h2 id="preview-heading" data-preview-doc-heading>把注意力留给正在发生的句子</h2>
+                <p id="preview-subheading" data-preview-doc-body>写作应当接近纸面：打开即写，内容留存在本地。需要时再切换源码、恢复历史版本，或导出成适合分享的格式。</p>
+                <blockquote data-i18n="preview.quote">没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。</blockquote>
+                <ul class="preview-tasks">
+                  <li class="done"><i>✓</i><span data-i18n="preview.task1">完成块编辑器改造</span></li>
+                  <li class="done"><i>✓</i><span data-i18n="preview.task2">补齐主题与亮暗模式</span></li>
+                  <li><i></i><span data-i18n="preview.task3">生成官网交互原型</span></li>
+                </ul>
+                <div class="preview-code" id="preview-code">
+                  <div class="preview-code-head"><span>today.md</span><span>Markdown Core</span></div>
+                  <pre data-i18n="preview.code">## 今日写作
+
+- 保持本地文件为唯一事实来源
+- 保存、版本与恢复共享同一条链路
+- 让主题跟随写作环境自然切换</pre>
+                </div>
+              </article>
+              <pre class="preview-source-view" id="preview-source-view" data-preview-pane="source" hidden># 把注意力留给正在发生的句子
+
+写作应当接近纸面：打开即写，内容留存在本地。
+
+> 没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。
+
+- [x] 完成块编辑器改造
+- [x] 补齐主题与亮暗模式
+- [ ] 生成官网交互原型</pre>
+              <div class="preview-find-panel" id="preview-find-panel">
+                <span class="find-case">Aa</span>
+                <input type="text" value="保存" data-i18n-value="preview.find.query" data-i18n-aria-label="preview.find" aria-label="Find">
+                <span class="find-count" id="preview-find-count">1 / 4</span>
+                <button class="mini-icon" type="button" aria-label="Previous match" data-preview-find="-1"><i data-lucide="chevron-up"></i></button>
+                <button class="mini-icon" type="button" aria-label="Next match" data-preview-find="1"><i data-lucide="chevron-down"></i></button>
+                <button class="mini-icon" type="button" data-find-toggle data-i18n-title="preview.find.replace" title="替换"><i data-lucide="replace"></i></button>
+                <button class="mini-icon" type="button" data-find-close data-i18n-title="preview.find.close" title="关闭"><i data-lucide="x"></i></button>
+                <div class="find-replace-row" data-find-replace-row hidden>
+                  <input type="text" value="保存" data-i18n-value="preview.find.replacement" data-i18n-aria-label="preview.find.replace" aria-label="Replacement">
+                  <button type="button" data-find-replace data-i18n="preview.find.replaceOne">替换</button>
+                  <button type="button" data-find-replace-all data-i18n="preview.find.replaceAll">全部替换</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="mock-statusbar">
-            <span><i data-lucide="code-2"></i>源码</span>
-            <span>字数 1288 · 自动保存</span>
-          </div>
-        </article>
 
-        <div class="floating-note note-left">
-          <span class="floating-icon"><i data-lucide="pen-line"></i></span>
-          <span><strong>打开即写</strong><small>不等待加载，不打断思路</small></span>
-        </div>
-        <div class="floating-note note-right">
-          <span class="floating-icon warm"><i data-lucide="save"></i></span>
-          <span><strong>安心保存</strong><small>临时文件写入后原子替换</small></span>
+            <footer class="preview-status">
+              <div class="preview-mode-switch" role="group">
+                <button class="active" type="button" data-preview-mode="preview"><i data-lucide="eye"></i><span data-i18n="preview.preview">预览</span></button>
+                <button type="button" data-preview-mode="source"><i data-lucide="code"></i><span data-i18n="preview.source">源码</span></button>
+              </div>
+              <span><span data-i18n="preview.lines">行 12</span> · <span data-i18n="preview.words">字数 638</span></span>
+            </footer>
+            <div class="preview-toast" id="preview-toast" role="status" aria-live="polite" hidden></div>
+          </section>
         </div>
       </div>
     </section>
 
-    <section class="quiet-strip">
-      <div class="section-shell quiet-strip-inner">
-        <span>Local First</span>
-        <span>Markdown Native</span>
-        <span>Open Source</span>
-        <span>macOS Desktop</span>
-      </div>
-    </section>
-
-    <section class="section-shell section-block" id="features">
-      <div class="section-heading centered reveal">
-        <span class="eyebrow">为长时间写作而设计</span>
-        <h2>安静的界面，清晰的取舍。</h2>
-        <p>Markdown Writing 不试图成为所有工具的集合。它只处理文档、编辑、保存和导出，并且把每一件事做得可预期。</p>
-      </div>
-      <div class="feature-grid">
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="hard-drive"></i></span>
-          <h3>本地文件优先</h3>
-          <p>文档以 Markdown 文件保存在自己的文件夹里，不被锁进平台，也不依赖网络。</p>
+    <section class="proof-strip" aria-label="Product principles">
+      <div class="section-shell proof-grid">
+        <article class="proof-item reveal">
+          <span class="proof-index">01</span>
+          <div>
+            <h2 data-i18n="proof.local.title">普通 Markdown 文件</h2>
+            <p data-i18n="proof.local.body">内容留在自己的目录，不被锁进私有格式。</p>
+          </div>
         </article>
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="panels-top-left"></i></span>
-          <h3>块编辑与源码并存</h3>
-          <p>在富文本视图里自然书写，需要时切回源文，结构始终由用户掌握。</p>
+        <article class="proof-item reveal">
+          <span class="proof-index">02</span>
+          <div>
+            <h2 data-i18n="proof.silicon.title">Apple Silicon 原生</h2>
+            <p data-i18n="proof.silicon.body">当前版本面向 M 系列 Mac，安装路径与下载入口保持单一。</p>
+          </div>
         </article>
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="file-search"></i></span>
-          <h3>文档树和大纲</h3>
-          <p>按文件夹管理稿件，点击大纲快速定位标题，让长文依然容易巡航。</p>
-        </article>
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="refresh-cw"></i></span>
-          <h3>稳定的自动保存</h3>
-          <p>保存请求按顺序执行，写入使用临时文件和原子替换，降低异常中断的风险。</p>
-        </article>
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="download"></i></span>
-          <h3>多格式导出</h3>
-          <p>支持 Markdown、纯文本、PNG、PDF 和 Word 可打开的文档格式。</p>
-        </article>
-        <article class="feature-card reveal">
-          <span class="feature-icon"><i data-lucide="shield-check"></i></span>
-          <h3>内容安全边界</h3>
-          <p>渲染内容经过净化，桌面文件操作限制在用户授权的目录和打开过的文件。</p>
+        <article class="proof-item reveal">
+          <span class="proof-index">03</span>
+          <div>
+            <h2 data-i18n="proof.open.title">开放源码</h2>
+            <p data-i18n="proof.open.body">编辑器核心、插件运行时和官网实现都可以直接审阅。</p>
+          </div>
         </article>
       </div>
     </section>
 
-    <section class="workflow-band" id="workflow">
-      <div class="section-shell workflow-layout">
-        <div class="workflow-copy reveal">
-          <span class="eyebrow">从想法到交付</span>
-          <h2>一条不打断思路的写作路径。</h2>
-          <p>打开一个文件夹，建立自己的文档结构。写作、保存和导出都在同一个视图中完成，不需要在工具之间搬运内容。</p>
-          <div class="workflow-steps">
-            <div class="workflow-step">
-              <span>01</span>
-              <div><strong>选择文档目录</strong><p>文章以普通 `.md` 文件保存在本地。</p></div>
-            </div>
-            <div class="workflow-step">
-              <span>02</span>
-              <div><strong>专注写作</strong><p>块视图适合排版，源码视图适合精确控制。</p></div>
-            </div>
-            <div class="workflow-step">
-              <span>03</span>
-              <div><strong>直接交付</strong><p>按需要导出，原文件和结构仍然属于自己。</p></div>
-            </div>
+    <section class="section-shell section-block" id="capabilities">
+      <div class="section-heading reveal">
+        <span class="eyebrow" data-i18n="capabilities.eyebrow">为长期写作而设计</span>
+        <h2 data-i18n="capabilities.title">功能不堆叠，每一层都围绕文档。</h2>
+        <p data-i18n="capabilities.lead">从输入、组织、恢复到交付，每一项能力都对应真实写作流程中的一步。</p>
+      </div>
+      <div class="capability-grid">
+        <article class="capability-card reveal">
+          <span class="capability-icon"><i data-lucide="panels-top-left"></i></span>
+          <h3 data-i18n="capabilities.editor.title">块编辑与源码并存</h3>
+          <p data-i18n="capabilities.editor.body">在结构化视图中自然书写，需要精确控制时立即切回 Markdown 源文。支持选择映射、组合输入和模型级撤销重做。</p>
+        </article>
+        <article class="capability-card reveal">
+          <span class="capability-icon green"><i data-lucide="file-search"></i></span>
+          <h3 data-i18n="capabilities.find.title">查找与替换</h3>
+          <p data-i18n="capabilities.find.body">在当前文档中查找、切换匹配项、替换单个结果或全部替换，并支持区分大小写。</p>
+        </article>
+        <article class="capability-card reveal">
+          <span class="capability-icon orange"><i data-lucide="list-tree"></i></span>
+          <h3 data-i18n="capabilities.workspace.title">文档树与大纲</h3>
+          <p data-i18n="capabilities.workspace.body">按目录组织稿件，通过最近文档快速返回，并用大纲在长文中稳定巡航。</p>
+        </article>
+        <article class="capability-card reveal">
+          <span class="capability-icon rose"><i data-lucide="package-check"></i></span>
+          <h3 data-i18n="capabilities.export.title">一份内容，多种交付</h3>
+          <p data-i18n="capabilities.export.body">保留 Markdown 原文件，并按需要导出纯文本、PNG、PDF 或 Word 可打开的文档格式。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="themes-band" id="themes">
+      <div class="section-shell">
+        <div class="section-heading reveal">
+          <span class="eyebrow" data-i18n="themes.eyebrow">同一工作区，四种气质</span>
+          <h2 data-i18n="themes.title">主题不是换一层颜色，而是重排整个工作环境。</h2>
+          <p data-i18n="themes.lead">Paper、Sepia、Graphite、Ocean 都包含亮色与暗色版本。系统模式可以为亮暗环境分别选择主题。</p>
+        </div>
+        <div class="theme-gallery">
+          <button class="theme-card reveal" type="button" data-theme-card="paper">
+            <span class="theme-mini theme-paper">
+              <span class="mini-window">
+                <i class="mini-sidebar"></i>
+                <i class="mini-paper"></i>
+              </span>
+            </span>
+            <span class="theme-card-copy"><strong data-i18n="theme.paper">纸张</strong><small>Paper · Light / Dark</small></span>
+          </button>
+          <button class="theme-card reveal" type="button" data-theme-card="sepia">
+            <span class="theme-mini theme-sepia">
+              <span class="mini-window">
+                <i class="mini-sidebar"></i>
+                <i class="mini-paper"></i>
+              </span>
+            </span>
+            <span class="theme-card-copy"><strong data-i18n="theme.sepia">书页米黄</strong><small>Sepia Page · Light / Dark</small></span>
+          </button>
+          <button class="theme-card reveal" type="button" data-theme-card="graphite">
+            <span class="theme-mini theme-graphite">
+              <span class="mini-window">
+                <i class="mini-sidebar"></i>
+                <i class="mini-paper"></i>
+              </span>
+            </span>
+            <span class="theme-card-copy"><strong data-i18n="theme.graphite">石墨</strong><small>Graphite · Light / Dark</small></span>
+          </button>
+          <button class="theme-card reveal" type="button" data-theme-card="ocean">
+            <span class="theme-mini theme-ocean">
+              <span class="mini-window">
+                <i class="mini-sidebar"></i>
+                <i class="mini-paper"></i>
+              </span>
+            </span>
+            <span class="theme-card-copy"><strong data-i18n="theme.ocean">深海</strong><small>Ocean · Light / Dark</small></span>
+          </button>
+        </div>
+        <div class="theme-custom-note reveal">
+          <i data-lucide="braces"></i>
+          <div>
+            <strong data-i18n="themes.custom">JSON 用户主题</strong>
+            <p data-i18n="themes.customBody">导入、复制、导出和删除自己的主题配置，预览会跟随当前编辑器令牌。</p>
           </div>
         </div>
-        <div class="workflow-visual reveal">
-          <div class="timeline-card">
-            <div class="timeline-line"></div>
-            <div class="timeline-node">
-              <span><i data-lucide="folder-open"></i></span>
-              <div><strong>选择文件夹</strong><small>docs / essays / release-notes</small></div>
-            </div>
-            <div class="timeline-node">
-              <span><i data-lucide="pen-line"></i></span>
-              <div><strong>开始写作</strong><small>自动保存 · Markdown 源文保留</small></div>
-            </div>
-            <div class="timeline-node">
-              <span><i data-lucide="package-check"></i></span>
-              <div><strong>导出交付</strong><small>Markdown · PDF · PNG · Word</small></div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
-    <section class="security-band" id="security">
-      <div class="section-shell security-layout">
-        <div class="security-copy reveal">
-          <span class="eyebrow">数据安全不是附加项</span>
-          <h2>先保证不丢，再谈功能。</h2>
-          <p>从 revision 检查到原子写入，再到版本历史与崩溃恢复，Markdown Writing 把保护原文放在所有编辑体验之前。</p>
-          <a class="button button-dark" href="./docs.html">查看安全设计</a>
+    <section class="safety-band" id="safety">
+      <div class="section-shell safety-layout">
+        <div class="safety-copy reveal">
+          <span class="eyebrow light" data-i18n="safety.eyebrow">数据安全不是附加项</span>
+          <h2 data-i18n="safety.title">先保证不丢，再谈功能。</h2>
+          <p data-i18n="safety.lead">从 revision 校验到原子写入，再到版本历史、回收站与崩溃恢复，所有保存路径都围绕同一原则设计：不静默覆盖。</p>
+          <a class="button button-paper" href="./docs.html">
+            <span data-i18n="action.details">查看安全设计</span>
+            <i data-lucide="arrow-up-right"></i>
+          </a>
         </div>
-        <div class="security-grid">
-          <article class="security-card reveal">
+        <div class="safety-grid">
+          <article class="safety-card reveal">
             <i data-lucide="git-compare-arrows"></i>
-            <strong>Revision 冲突检测</strong>
-            <span>外部修改不会被静默覆盖</span>
+            <strong data-i18n="safety.item1.title">Revision 冲突检测</strong>
+            <span data-i18n="safety.item1.body">外部修改不会被静默覆盖。</span>
           </article>
-          <article class="security-card reveal">
+          <article class="safety-card reveal">
             <i data-lucide="file-check-2"></i>
-            <strong>原子写入</strong>
-            <span>临时文件完成后替换原文档</span>
+            <strong data-i18n="safety.item2.title">原子替换</strong>
+            <span data-i18n="safety.item2.body">临时文件写完后替换原文档。</span>
           </article>
-          <article class="security-card reveal">
+          <article class="safety-card reveal">
             <i data-lucide="history"></i>
-            <strong>版本历史</strong>
-            <span>保留最近 50 个自动保存快照</span>
+            <strong data-i18n="safety.item3.title">版本历史</strong>
+            <span data-i18n="safety.item3.body">保留最近 50 个自动保存快照。</span>
           </article>
-          <article class="security-card reveal">
+          <article class="safety-card reveal">
+            <i data-lucide="trash-2"></i>
+            <strong data-i18n="safety.item4.title">回收站恢复</strong>
+            <span data-i18n="safety.item4.body">误删文档可恢复到原路径。</span>
+          </article>
+          <article class="safety-card safety-card-wide reveal">
             <i data-lucide="life-buoy"></i>
-            <strong>崩溃恢复</strong>
-            <span>启动时恢复未保存内容</span>
+            <strong data-i18n="safety.item5.title">崩溃恢复</strong>
+            <span data-i18n="safety.item5.body">启动时识别未落盘的编辑现场。</span>
           </article>
         </div>
-      </div>
-    </section>
-
-    <section class="section-shell section-block" id="export">
-      <div class="section-heading centered reveal">
-        <span class="eyebrow">Markdown 是起点，不是终点</span>
-        <h2>一篇内容，多种去向。</h2>
-        <p>文件始终是自己的，需要分享或归档时，再选择最合适的格式。</p>
-      </div>
-      <div class="export-grid">
-        <article class="export-card reveal">
-          <span class="export-file">.md</span>
-          <h3>Markdown</h3>
-          <p>保留最完整、最可迁移的原始内容。</p>
-        </article>
-        <article class="export-card reveal">
-          <span class="export-file">.pdf</span>
-          <h3>PDF</h3>
-          <p>适合阅读、打印和稳定分享。</p>
-        </article>
-        <article class="export-card reveal">
-          <span class="export-file">.png</span>
-          <h3>PNG</h3>
-          <p>快速生成适合社交平台和演示的图片。</p>
-        </article>
-        <article class="export-card reveal">
-          <span class="export-file">.doc</span>
-          <h3>Word</h3>
-          <p>交付给仍然依赖 Office 文档的流程。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section-shell latest-release reveal" aria-labelledby="latest-release-title">
-      <div class="latest-release-copy">
-        <span class="eyebrow">GitHub Releases</span>
-        <h2 id="latest-release-title">最新版本</h2>
-        <strong id="latest-version">正在读取版本信息...</strong>
-        <span id="latest-date"></span>
-        <p id="latest-notes">发布后，这里会同步最新变更和下载入口。</p>
-      </div>
-      <div class="latest-release-actions">
-        <span id="download-detail">正在检测你的平台...</span>
-        <a class="button button-dark" id="latest-release-link" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer">
-          查看完整更新记录
-        </a>
       </div>
     </section>
 
     <section class="download-band" id="download">
       <div class="section-shell download-inner reveal">
         <div>
-          <span class="eyebrow light" id="download-version">MARKDOWN WRITING</span>
-          <h2>把下一篇文章，写在自己的磁盘上。</h2>
-          <p>下载桌面版，选择一个文件夹，然后直接开始。</p>
+          <span class="eyebrow light" data-i18n="download.eyebrow">macOS Apple Silicon</span>
+          <h2 data-i18n="download.title">把下一篇文章，写在自己的磁盘上。</h2>
+          <p data-i18n="download.lead">当前版本仅支持 M1、M2、M3、M4 及后续 Apple Silicon 芯片。</p>
         </div>
         <div class="download-actions">
-          <a class="button button-paper" href="https://github.com/smartartian/Markdown-writing/releases" target="_blank" rel="noreferrer" data-download-primary>
+          <a class="button button-paper" href="./download.html">
             <i data-lucide="download"></i>
-            <span data-download-label>下载 macOS 版</span>
+            <span data-i18n="action.downloadPage">前往下载页</span>
+          </a>
+          <a class="button button-ghost" href="./install.html">
+            <i data-lucide="book-open-check"></i>
+            <span data-i18n="action.install">安装说明</span>
           </a>
           <a class="button button-ghost" href="https://github.com/smartartian/Markdown-writing" target="_blank" rel="noreferrer">
             <i data-lucide="code-2"></i>
-            查看源码
+            <span data-i18n="action.source">查看源码</span>
           </a>
+          <small data-i18n="download.requirement">需要 macOS 与 Apple Silicon 芯片。应用当前未签名，首次打开请按系统提示确认。</small>
         </div>
       </div>
     </section>
@@ -338,12 +560,12 @@
         <img src="./assets/logo-64.png" alt="" class="brand-mark" width="34" height="34" loading="lazy">
         <span>Markdown Writing</span>
       </a>
-      <p>本地优先的 Markdown 桌面写作工具。</p>
+      <p data-i18n="footer.tagline">本地优先的 macOS Markdown 桌面写作工具。</p>
       <span id="copyright-year"></span>
     </div>
   </footer>
 
-  <script src="./vendor/lucide.min.js?v=20260918-6"></script>
-  <script type="module" src="./main.js?v=20260918-6"></script>
+  <script src="./vendor/lucide.min.js?v=20260919-3"></script>
+  <script type="module" src="./main.js?v=20260919-3"></script>
 </body>
 </html>
