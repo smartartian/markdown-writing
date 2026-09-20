@@ -1,0 +1,17 @@
+{
+  "name": "lattice",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./kernel": "./context.ts",
+    "./contracts": "./contracts/index.ts",
+    "./plugins": "./plugins/index.ts"
+  },
+  "scripts": {
+    "typecheck": "npx -y -p typescript@5 tsc --noEmit -p tsconfig.json",
+    "verify": "npx -y tsx plugins/verify/index.ts",
+    "start": "npx -y tsx main.ts"
+  }
+}

@@ -18,7 +18,7 @@
     "dompurify": "^3.2.6",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "lattice": "file:../../../../dsh-config/dsh-con/playground/lattice",
+    "lattice": "file:vendor/lattice",
     "lucide": "^1.25.0",
     "marked": "^18.0.6",
     "turndown": "^7.2.4",

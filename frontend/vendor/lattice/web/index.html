@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattice 插件平台可视化看板</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-dim: rgba(56, 189, 248, 0.15);
+      --success: #34d399;
+      --success-dim: rgba(52, 211, 153, 0.15);
+      --warning: #fbbf24;
+      --warning-dim: rgba(251, 191, 36, 0.15);
+      --danger: #f87171;
+      --purple: #a78bfa;
+      --purple-dim: rgba(167, 139, 250, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      padding: 24px;
+      line-height: 1.5;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .title-group h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title-group p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--danger);
+    }
+
+    .status-dot.connected {
+      background-color: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .grid-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 20px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+
+    .tag-blue { background: var(--primary-dim); color: var(--primary); }
+    .tag-green { background: var(--success-dim); color: var(--success); }
+    .tag-purple { background: var(--purple-dim); color: var(--purple); }
+    .tag-red { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
+    .tag-gray { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+
+    /* 插件激活失败：红色错误态 */
+    .tree-node.node-failed {
+      border-color: var(--danger);
+      background: rgba(248, 113, 113, 0.06);
+    }
+
+    .node-error {
+      font-size: 11px;
+      color: var(--danger);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      word-break: break-all;
+      margin-top: 4px;
+    }
+
+    /* 插件与服务树样式 */
+    .tree-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* 插件分组标题（系统层 / 业务层） */
+    .group-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin-bottom: -4px;
+    }
+
+    .group-label::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--primary);
+    }
+
+    .group-label.system::before {
+      background: var(--warning);
+    }
+
+    .tree-node {
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: rgba(15, 23, 42, 0.4);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .node-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .node-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .node-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* 洋葱圈模型可视化 */
+    .onion-container {
+      position: relative;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px dashed var(--card-border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .onion-layer {
+      border: 1px solid var(--purple);
+      background: var(--purple-dim);
+      border-radius: 8px;
+      padding: 12px;
+      position: relative;
+    }
+
+    .onion-layer.core {
+      border-color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    .layer-badge {
+      position: absolute;
+      top: -10px;
+      left: 12px;
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    .pipeline-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      background: rgba(15, 23, 42, 0.7);
+    }
+
+    .pipeline-step.active {
+      border-left: 3px solid var(--warning);
+    }
+
+    /* 控制面板与触发区域 */
+    .action-panel {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary);
+    }
+
+    button {
+      background: var(--primary);
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* 实时事件日志流 */
+    .log-stream {
+      background: #090d16;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      height: 260px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-item {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 2px 0;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      font-size: 11px;
+      min-width: 65px;
+    }
+
+    .log-tag {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+
+    .log-content {
+      color: var(--text-main);
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title-group">
+      <h1>
+        <span>Lattice 插件平台</span>
+        <span class="tag tag-blue">Lattice Kernel</span>
+      </h1>
+      <p>本地优先的插件化应用内核 · 乱序依赖注入与洋葱圈流水线监控</p>
+    </div>
+    <div class="status-badge">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText">SSE 连接中...</span>
+    </div>
+  </div>
+
+  <div class="grid-layout">
+    <!-- 左侧：微内核与插件状态看板 -->
+    <div class="card">
+      <div class="card-title">
+        <span>已加载插件列表</span>
+        <span class="tag tag-green" id="pluginCountTag">加载中...</span>
+      </div>
+
+      <div class="tree-section" id="pluginList">
+        <div class="tree-node">
+          <span class="node-desc">正在从微内核读取插件注册表...</span>
+        </div>
+      </div>
+
+      <div class="card-title" style="margin-top: 4px;">
+        <span>已挂载服务</span>
+        <span class="tag tag-blue">Service Registry</span>
+      </div>
+
+      <div class="tree-section" id="serviceList">
+        <div class="tree-node">
+          <span class="node-desc">正在读取服务状态...</span>
+        </div>
+      </div>
+
+      <!-- 交互控制触发台 -->
+      <div class="card-title" style="margin-top: 12px;">
+        <span>Agent 运行触发</span>
+      </div>
+      <div class="action-panel">
+        <input type="text" id="promptInput" value="请帮我算一下 25 * 4 + 10 是多少" placeholder="输入 Agent 任务 Prompt..." />
+        <button id="runBtn" onclick="triggerAgentRun()">执行任务</button>
+      </div>
+    </div>
+
+    <!-- 右侧：洋葱圈流水线跟踪与事件流 -->
+    <div class="card">
+      <div class="card-title">
+        <span>洋葱圈流水线跟踪 (Waterfall Pipeline)</span>
+        <span class="tag tag-purple">Onion Model</span>
+      </div>
+
+      <div class="onion-container">
+        <!-- 外层：Audit 前置 -->
+        <div class="onion-layer">
+          <span class="layer-badge">Waterfall 外层 1: tools/pre-execute (拦截校验)</span>
+          <div id="stepPre" class="pipeline-step">
+            <span>🛡️ 拦截器: AuditPlugin 检查参数与安全策略</span>
+          </div>
+
+          <!-- 核心层：工具实际执行 -->
+          <div class="onion-layer core" style="margin-top: 10px;">
+            <span class="layer-badge">内核层 (Core Execution)</span>
+            <div id="stepCore" class="pipeline-step">
+              <span>⚙️ 工具执行: CalculatorTool (eval 计算表达式)</span>
+            </div>
+          </div>
+
+          <!-- 外层：Audit 后置 -->
+          <div style="margin-top: 10px;"></div>
+          <span class="layer-badge" style="top: auto; bottom: -10px;">Waterfall 外层 2: tools/post-execute (脱敏过滤)</span>
+          <div id="stepPost" class="pipeline-step">
+            <span>🛡️ 拦截器: AuditPlugin 对返回值处理与日志脱敏</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-title" style="margin-top: 8px;">
+        <span>实时通信流 (SSE Feed)</span>
+        <span style="font-size: 12px; color: var(--text-muted);">自动同步后台微内核事件</span>
+      </div>
+
+      <div id="logStream" class="log-stream">
+        <div class="log-item">
+          <span class="log-time">[系统]</span>
+          <span class="log-content">等待后台 SSE 推送事件...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const logStream = document.getElementById('logStream');
+    const stepPre = document.getElementById('stepPre');
+    const stepCore = document.getElementById('stepCore');
+    const stepPost = document.getElementById('stepPost');
+    const runBtn = document.getElementById('runBtn');
+
+    // 格式化时间
+    function formatTime(timestamp) {
+      const d = new Date(timestamp || Date.now());
+      return d.toTimeString().split(' ')[0];
+    }
+
+    // 追加实时日志
+    function appendLog(time, tag, msg, color = 'var(--text-main)') {
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      item.innerHTML = `
+        <span class="log-time">[${time}]</span>
+        <span class="log-tag" style="background: rgba(255,255,255,0.1); color: ${color};">${tag}</span>
+        <span class="log-content">${msg}</span>
+      `;
+      logStream.appendChild(item);
+      logStream.scrollTop = logStream.scrollHeight;
+    }
+
+    // 建立 SSE 实时通信连接
+    function initSSE() {
+      const evtSource = new EventSource('/api/events/stream');
+
+      evtSource.onopen = () => {
+        statusDot.classList.add('connected');
+        statusText.textContent = '已连接到 Node 微内核';
+        appendLog(formatTime(), 'CONNECT', 'SSE 实时推送通道建立成功', 'var(--success)');
+      };
+
+      evtSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleVisualEvent(data);
+        } catch (err) {
+          console.error('解析 SSE 数据错误', err);
+        }
+      };
+
+      evtSource.onerror = () => {
+        statusDot.classList.remove('connected');
+        statusText.textContent = '连接中断，重连中...';
+      };
+    }
+
+    // 处理后台推来的结构化事件并高亮洋葱圈
+    function handleVisualEvent(evt) {
+      const time = formatTime(evt.timestamp);
+
+      if (evt.type === 'connected') {
+        appendLog(time, 'SYS', evt.message, 'var(--primary)');
+        return;
+      }
+
+      if (evt.type === 'waterfall') {
+        if (evt.stage === 'pre-execute:enter') {
+          stepPre.classList.add('active');
+          appendLog(time, 'PRE-EXEC', evt.message, 'var(--purple)');
+        } else if (evt.stage === 'pre-execute:leave') {
+          stepCore.classList.add('active');
+          appendLog(time, 'CORE-EXEC', '⚙️ 工具开始执行底层运算', 'var(--primary)');
+        } else if (evt.stage === 'post-execute:enter') {
+          stepPost.classList.add('active');
+          appendLog(time, 'POST-EXEC', evt.message, 'var(--warning)');
+        } else if (evt.stage === 'post-execute:leave') {
+          setTimeout(() => {
+            stepPre.classList.remove('active');
+            stepCore.classList.remove('active');
+            stepPost.classList.remove('active');
+          }, 1500);
+          appendLog(time, 'PIPELINE', '✅ 洋葱圈中间件穿透完毕，控制权返回 Agent', 'var(--success)');
+        }
+        return;
+      }
+
+      if (evt.type === 'agent') {
+        if (evt.stage === 'answer') {
+          appendLog(time, 'ANSWER', evt.message, 'var(--success)');
+        } else {
+          appendLog(time, 'AGENT', evt.message, 'var(--primary)');
+        }
+      } else {
+        appendLog(time, 'KERNEL', evt.message, 'var(--text-muted)');
+      }
+    }
+
+    // 触发执行 Agent 任务
+    async function triggerAgentRun() {
+      const prompt = document.getElementById('promptInput').value.trim();
+      if (!prompt) return;
+
+      runBtn.disabled = true;
+      runBtn.textContent = '运行中...';
+
+      try {
+        const res = await fetch('/api/agent/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        });
+        const data = await res.json();
+      } catch (err) {
+        appendLog(formatTime(), 'ERROR', '请求失败: ' + err.message, 'var(--danger)');
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '执行任务';
+      }
+    }
+
+    // 插件状态 -> 展示标签（failed 为红色错误态，disposed / disposing 为灰）
+    const PLUGIN_STATUS_TAG = {
+      active: { cls: 'tag-green', text: 'ACTIVE' },
+      activating: { cls: 'tag-blue', text: 'ACTIVATING' },
+      starting: { cls: 'tag-blue', text: 'STARTING' },
+      pending: { cls: 'tag-purple', text: 'PENDING' },
+      disposing: { cls: 'tag-gray', text: 'DISPOSING' },
+      disposed: { cls: 'tag-gray', text: 'DISPOSED' },
+      failed: { cls: 'tag-red', text: 'FAILED' },
+    };
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, (ch) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+      ));
+    }
+
+    // 渲染插件列表（按层级分组：系统插件 / 业务插件）
+    function renderPlugins(plugins) {
+      const container = document.getElementById('pluginList');
+      const failedCount = plugins.filter((p) => p.status === 'failed').length;
+      const countTag = document.getElementById('pluginCountTag');
+      countTag.textContent = failedCount > 0
+        ? `${plugins.length} 个插件 · ${failedCount} 个失败`
+        : `${plugins.length} 个插件`;
+      countTag.className = failedCount > 0 ? 'tag tag-red' : 'tag tag-green';
+
+      if (plugins.length === 0) {
+        container.innerHTML = '<div class="tree-node"><span class="node-desc">暂无插件</span></div>';
+        return;
+      }
+
+      const groups = [
+        { layer: 'system', label: '系统插件 · 宿主基础设施层' },
+        { layer: 'business', label: '业务插件 · Agent 领域层' },
+      ];
+
+      container.innerHTML = groups.map((group) => {
+        const list = plugins.filter((p) => p.layer === group.layer);
+        if (list.length === 0) return '';
+
+        const nodes = list.map((p) => {
+          const deps = p.inject.length > 0 ? `inject: ['${p.inject.join("', '")}']` : '无依赖声明';
+          const tag = PLUGIN_STATUS_TAG[p.status] || PLUGIN_STATUS_TAG.pending;
+          // 激活失败时附带可序列化错误摘要
+          const errorLine = p.status === 'failed' && p.error
+            ? `<span class="node-error">✖ ${escapeHtml(p.error.message)}<br>(${escapeHtml(p.id)}, 尝试 ${p.attempt} 次)</span>`
+            : '';
+          return `
+            <div class="tree-node${p.status === 'failed' ? ' node-failed' : ''}">
+              <div class="node-info">
+                <span class="node-name">${escapeHtml(p.name)}</span>
+                <span class="node-desc">${escapeHtml(deps)}</span>
+                ${errorLine}
+              </div>
+              <span class="tag ${tag.cls}">${tag.text}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="group-label ${group.layer}">${group.label} (${list.length})</div>
+          ${nodes}
+        `;
+      }).join('');
+    }
+
+    // 渲染已挂载服务
+    function renderServices(services, tools) {
+      const container = document.getElementById('serviceList');
+      const toolNames = tools.map((t) => t.name).join(', ') || '无';
+      const items = [
+        { mounted: services.tools, name: 'ctx.tools (ToolService)', desc: `已挂载 ${tools.length} 个工具: ${toolNames}` },
+        { mounted: services.llm, name: 'ctx.llm (LLMService)', desc: '支持 Tool Calling 会话与结果总结' },
+        { mounted: services.agent, name: 'ctx.agent (AgentService)', desc: 'Agent 主循环，返回带 traceId 的执行轨迹' },
+      ];
+
+      container.innerHTML = items.map((s) => {
+        const statusTag = s.mounted
+          ? '<span class="tag tag-green">ACTIVE</span>'
+          : '<span class="tag tag-purple">PENDING</span>';
+        return `
+          <div class="tree-node">
+            <div class="node-info">
+              <span class="node-name">${s.name}</span>
+              <span class="node-desc">${s.desc}</span>
+            </div>
+            ${statusTag}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 读取微内核注册表状态（插件列表 + 已挂载服务）
+    async function loadKernelStatus() {
+      try {
+        const res = await fetch('/api/kernel/status');
+        const data = await res.json();
+        renderPlugins(data.plugins || []);
+        renderServices(data.services || {}, data.tools || []);
+      } catch (err) {
+        appendLog(formatTime(), 'ERROR', '读取微内核状态失败: ' + err.message, 'var(--danger)');
+      }
+    }
+
+    // 初始化运行
+    initSSE();
+    loadKernelStatus();
+  </script>
+</body>
+</html>
