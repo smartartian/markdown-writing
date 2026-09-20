@@ -2,10 +2,18 @@ import { version as APP_VERSION } from '../../package.json';
 
 const browserFiles = new Map();
 const browserRecycle = [];
+const browserFileHandles = new Map();
+const browserDirectoryHandles = new Map();
 const BROWSER_THEMES_KEY = 'md_editor_user_themes';
 const BROWSER_PLUGINS_KEY = 'md_editor_user_plugins';
+const BROWSER_SETTINGS_KEY = 'md_editor_app_settings';
 let browserFileInput = null;
 let browserRootDir = '';
+
+const MARKDOWN_FILE_TYPES = [{
+  description: 'Markdown 文件',
+  accept: { 'text/markdown': ['.md', '.markdown', '.txt'] },
+}];
 
 function hashContent(content) {
   let hash = 2166136261;
@@ -29,7 +37,81 @@ function createBrowserFile(name, path, content, modTime = '') {
   };
 }
 
-function selectDocumentDir() {
+function supportsOpenFilePicker() {
+  return typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function';
+}
+
+function supportsSaveFilePicker() {
+  return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
+}
+
+function supportsDirectoryPicker() {
+  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+}
+
+function isPickerCancellation(error) {
+  return error?.name === 'AbortError' || error?.name === 'NotAllowedError';
+}
+
+function downloadBrowserFile(path, content) {
+  const blob = new Blob([content], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = path.split('/').pop() || 'untitled.md';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function writeBrowserFile(path, content) {
+  const handle = browserFileHandles.get(path);
+  if (!handle) {
+    downloadBrowserFile(path, content);
+    return;
+  }
+  const writable = await handle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function readDirectoryHandle(handle, path) {
+  browserDirectoryHandles.set(path, handle);
+  for await (const [name, entry] of handle.entries()) {
+    const entryPath = `${path}/${name}`;
+    if (entry.kind === 'directory') {
+      await readDirectoryHandle(entry, entryPath);
+      continue;
+    }
+    if (!/\.(md|markdown)$/i.test(name)) continue;
+    const file = await entry.getFile();
+    const content = await file.text();
+    browserFiles.set(entryPath, createBrowserFile(
+      name,
+      entryPath,
+      content,
+      new Date(file.lastModified).toISOString().replace('T', ' ').slice(0, 19),
+    ));
+    browserFileHandles.set(entryPath, entry);
+  }
+}
+
+async function selectDocumentDir() {
+  if (supportsDirectoryPicker()) {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      browserFiles.clear();
+      browserFileHandles.clear();
+      browserDirectoryHandles.clear();
+      browserRootDir = handle.name;
+      const rootPath = '/' + handle.name;
+      await readDirectoryHandle(handle, rootPath);
+      return rootPath;
+    } catch (error) {
+      if (isPickerCancellation(error)) return null;
+      throw error;
+    }
+  }
+
   return new Promise((resolve) => {
     if (!browserFileInput) {
       browserFileInput = document.createElement('input');
@@ -131,24 +213,14 @@ function readDocumentWithMeta(path) {
   };
 }
 
-function writeDocument(path, content) {
+async function writeDocument(path, content) {
   if (browserFiles.has(path)) {
     const file = browserFiles.get(path);
     file.content = content;
     file.size = content.length;
     file.modTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
   }
-  try {
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = path.split('/').pop() || 'untitled.md';
-    anchor.click();
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    // Browser mode cannot reliably write back to the selected folder.
-  }
+  await writeBrowserFile(path, content);
 }
 
 function writeImageAsset(_documentPath, _imageDir, fileName, data) {
@@ -169,7 +241,7 @@ function readImageAsset(_documentPath, _imageDir, source) {
   return Promise.resolve(source);
 }
 
-function writeDocumentVersioned(path, content, expectedRevision, expectedHash) {
+async function writeDocumentVersioned(path, content, expectedRevision, expectedHash) {
   let file = browserFiles.get(path);
   if (!file) {
     file = createBrowserFile(path.split('/').pop() || 'untitled.md', path, '');
@@ -194,6 +266,7 @@ function writeDocumentVersioned(path, content, expectedRevision, expectedHash) {
   file.content = content;
   file.size = content.length;
   file.modTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  await writeBrowserFile(path, content);
   return file.revision;
 }
 
@@ -207,11 +280,19 @@ function restoreFileVersion(path, versionID, expectedRevision, expectedHash) {
   return writeDocumentVersioned(path, version.content, expectedRevision, expectedHash);
 }
 
-function createDocument(dirPath, name) {
+async function createDocument(dirPath, name) {
   const fullName = name.endsWith('.md') ? name : name + '.md';
   const path = dirPath + '/' + fullName;
   if (browserFiles.has(path)) return null;
   const content = `# ${name}\n\n`;
+  const directoryHandle = browserDirectoryHandles.get(dirPath);
+  if (directoryHandle) {
+    const fileHandle = await directoryHandle.getFileHandle(fullName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    browserFileHandles.set(path, fileHandle);
+  }
   browserFiles.set(path, createBrowserFile(fullName, path, content));
   return { name: fullName, path, size: content.length, modTime: browserFiles.get(path).modTime };
 }
@@ -249,7 +330,30 @@ function renameDocument(path, newName) {
   };
 }
 
-function openDocumentFile() {
+async function openDocumentFile() {
+  if (supportsOpenFilePicker()) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: MARKDOWN_FILE_TYPES,
+      });
+      const file = await handle.getFile();
+      const content = await file.text();
+      const path = '/' + file.name;
+      browserFiles.set(path, createBrowserFile(
+        file.name,
+        path,
+        content,
+        new Date(file.lastModified).toISOString().replace('T', ' ').slice(0, 19),
+      ));
+      browserFileHandles.set(path, handle);
+      return path;
+    } catch (error) {
+      if (isPickerCancellation(error)) return '';
+      throw error;
+    }
+  }
+
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -274,17 +378,27 @@ function openDocumentFile() {
   });
 }
 
-function saveDocumentAs(content) {
-  const name = '未命名.md';
+async function saveDocumentAs(content) {
+  let name = '未命名.md';
+  let handle = null;
+  if (supportsSaveFilePicker()) {
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: MARKDOWN_FILE_TYPES,
+      });
+      name = handle.name || name;
+    } catch (error) {
+      if (isPickerCancellation(error)) throw new Error('canceled');
+      throw error;
+    }
+  }
   const path = '/' + name;
   browserFiles.set(path, createBrowserFile(name, path, content));
-  const blob = new Blob([content], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  if (handle) {
+    browserFileHandles.set(path, handle);
+  }
+  await writeBrowserFile(path, content);
   return { name, path, size: content.length, modTime: browserFiles.get(path).modTime };
 }
 
@@ -485,6 +599,21 @@ function deleteUserPlugin(id) {
   localStorage.setItem(BROWSER_PLUGINS_KEY, JSON.stringify(plugins));
 }
 
+function loadBrowserAppSettings() {
+  try {
+    const raw = localStorage.getItem(BROWSER_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveBrowserAppSetting(key, value) {
+  const settings = loadBrowserAppSettings();
+  settings[key] = value;
+  localStorage.setItem(BROWSER_SETTINGS_KEY, JSON.stringify(settings));
+}
+
 export const browserAdapter = {
   name: 'browser',
   selectDocumentDir,
@@ -504,8 +633,11 @@ export const browserAdapter = {
   restoreRecycleItem,
   purgeRecycleItem,
   renameDocument,
+  revealDocument: async () => false,
   openDocumentFile,
+  acceptDroppedDocument: async path => ({ name: path.split('/').pop(), path }),
   saveDocumentAs,
+  saveExportFile: async () => null,
   addRecentFile: async () => {},
   listRecentFiles: async () => [],
   getAppState: async () => null,
@@ -517,8 +649,8 @@ export const browserAdapter = {
   listDbDocuments: listDbDocumentSummaries,
   listDbDocumentVersions,
   restoreDbDocumentVersion,
-  saveAppSetting: async () => {},
-  loadAppSettings: async () => ({}),
+  saveAppSetting: async (key, value) => saveBrowserAppSetting(key, value),
+  loadAppSettings: async () => loadBrowserAppSettings(),
   getThemesDirectory: async () => 'Browser localStorage: md_editor_user_themes',
   listUserThemes: async () => listUserThemes(),
   saveUserTheme: async (id, content) => saveUserTheme(id, content),

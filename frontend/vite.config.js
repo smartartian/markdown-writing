@@ -25,6 +25,10 @@ const typescriptSourceResolver = {
 
 export default defineConfig({
   plugins: [typescriptSourceResolver],
+  server: {
+    port: 5100,
+    strictPort: true,
+  },
   resolve: {
     alias: {
       dompurify: doPurifyEntry,

@@ -1,4 +1,5 @@
 import { parseMarkdownBlocksLegacy } from './legacy-parser.js';
+import { createBlockId } from '../editor-core/model/id.js';
 import { MarkdownDocument } from '../editor-core/model/document.js';
 import { parseMarkdown } from '../editor-core/parser/block-parser.js';
 import { serializeDocument } from '../editor-core/serializer/markdown-serializer.js';
@@ -141,8 +142,8 @@ export function createEditorCore({
       const rendered = renderBlockHtml(block);
       html += `
         <div class="${getBlockClassName(block, isActive)}" data-block-id="${escapeHtml(block.blockId || `block-${i}`)}" data-block-index="${i}" data-block-type="${escapeHtml(block.type)}">
-          <div class="block-source" contenteditable="${isActive ? 'true' : 'false'}">${rawEscaped || '&#8203;'}</div>
-          <div class="block-rendered">${rendered}</div>
+          <div class="block-source" contenteditable="false" hidden>${rawEscaped || '&#8203;'}</div>
+          <div class="block-rendered" contenteditable="${isActive ? 'true' : 'false'}" spellcheck="true">${rendered}</div>
         </div>
       `;
     }
@@ -157,9 +158,7 @@ export function createEditorCore({
       if (!source) continue;
       rawBlocks.push((source.textContent || '').replace(/\u200B/g, '').trim());
     }
-    while (rawBlocks.length > 0 && rawBlocks[0] === '') rawBlocks.shift();
-    while (rawBlocks.length > 0 && rawBlocks[rawBlocks.length - 1] === '') rawBlocks.pop();
-    return rawBlocks.join('\n\n');
+    return rawBlocks.filter(raw => raw !== '').join('\n\n');
   }
 
   return {
@@ -171,4 +170,19 @@ export function createEditorCore({
     buildBlockEditorHtml,
     collectBlocksMarkdown,
   };
+}
+
+export function preserveBlockBoundaryNewlines(previousRaw, nextRaw) {
+  const trailingNewlines = String(previousRaw ?? '').match(/\n+$/)?.[0] || '';
+  const content = String(nextRaw ?? '').replace(/\n+$/, '');
+  return content + trailingNewlines;
+}
+
+export function createMarkdownSeparatorBlock() {
+  return createBlock({
+    id: createBlockId('blank'),
+    type: BLOCK_TYPES.RAW,
+    raw: '\n\n',
+    attrs: { separator: true },
+  });
 }

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.0.2 - 2026-09-21
+
+Browser and desktop workflow release.
+
+### Added
+
+- Browser mode now uses the File System Access API to open, create, and save documents directly to local files and folders when supported.
+- Native drag-and-drop document opening, export file dialogs, and reveal-in-file-manager actions on the desktop.
+- File-tree context menus, inline renaming, active-folder highlighting, and automatic reveal of the current document.
+- Split-pane layout controls for the home recent-files panel and the editor sidebar.
+- A customizable DMG installer layout for macOS releases.
+
+### Changed
+
+- Improved Markdown block editing so plain text is not escaped, paragraph breaks use standard blank lines, and generated list markers stay compact.
+- Refined opening and editing recently used files, including matching file-tree navigation and hover states.
+- Improved export handling across Markdown, text, PNG, PDF, and Word-compatible output.
+- Updated desktop window dragging and file-drop behavior for a more stable Wails experience.
+- Updated application and website version metadata to `0.0.2`.
+
+### Fixed
+
+- Fixed blocking issues with browser-mode file save-back, block-editor line breaks, and list Markdown output.
+- Fixed the missing application favicon request.
+
 ## 0.0.1 - 2026-09-19
 
 Initial public desktop release.

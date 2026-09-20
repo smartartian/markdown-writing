@@ -240,6 +240,28 @@ func (a *App) OpenDocumentFile() (string, error) {
 	return path, nil
 }
 
+// AcceptDroppedDocument registers a dragged Markdown file and returns its document metadata.
+func (a *App) AcceptDroppedDocument(path string) (Document, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".md" && ext != ".markdown" {
+		return Document{}, fmt.Errorf("only Markdown files can be opened")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return Document{}, err
+	}
+	if info.IsDir() {
+		return Document{}, fmt.Errorf("expected a Markdown file")
+	}
+	a.allowFile(path)
+	return Document{
+		Name:    filepath.Base(path),
+		Path:    path,
+		Size:    info.Size(),
+		ModTime: info.ModTime().Format("2006-01-02 15:04"),
+	}, nil
+}
+
 // ---- Database Document Methods ----
 
 // DBCreateDocument creates a new document in SQLite
@@ -1030,6 +1052,68 @@ func (a *App) SaveDocumentAs(content string) (Document, error) {
 		Size:    info.Size(),
 		ModTime: info.ModTime().Format("2006-01-02 15:04"),
 	}, nil
+}
+
+// SaveExportFile saves exported content through a native save dialog.
+func (a *App) SaveExportFile(defaultName, content, encoding string) (string, error) {
+	ext := strings.TrimPrefix(filepath.Ext(defaultName), ".")
+	filters := []runtime.FileFilter{}
+	if ext != "" {
+		filters = append(filters, runtime.FileFilter{
+			DisplayName: strings.ToUpper(ext) + " file",
+			Pattern:     "*." + ext,
+		})
+	}
+
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "导出文件",
+		DefaultFilename: defaultName,
+		Filters:         filters,
+	})
+	if err != nil {
+		return "", err
+	}
+	if path == "" {
+		return "", fmt.Errorf("canceled")
+	}
+	if filepath.Ext(path) == "" && ext != "" {
+		path += "." + ext
+	}
+
+	var data []byte
+	if encoding == "base64" {
+		data, err = base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		data = []byte(content)
+	}
+	if err := atomicWriteFile(path, data, 0644); err != nil {
+		return "", err
+	}
+	a.allowFile(path)
+	return path, nil
+}
+
+// RevealDocument opens the containing folder and selects the document in the platform file manager.
+func (a *App) RevealDocument(path string) error {
+	if err := a.requireAllowedPath(path); err != nil {
+		return err
+	}
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+	var command *exec.Cmd
+	switch goruntime.GOOS {
+	case "darwin":
+		command = exec.Command("open", "-R", path)
+	case "windows":
+		command = exec.Command("explorer", "/select,", path)
+	default:
+		command = exec.Command("xdg-open", filepath.Dir(path))
+	}
+	return command.Start()
 }
 
 // GetAppState returns the saved app state from SQLite

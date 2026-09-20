@@ -2,7 +2,7 @@
   "name": "frontend",
   "private": true,
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,8 +16,12 @@
   },
   "dependencies": {
     "dompurify": "^3.2.6",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lattice": "file:../../../../dsh-config/dsh-con/playground/lattice",
     "lucide": "^1.25.0",
-    "marked": "^18.0.6"
+    "marked": "^18.0.6",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
   }
 }

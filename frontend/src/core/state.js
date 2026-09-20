@@ -18,6 +18,7 @@ export const state = {
   view: 'editor',
   sidebarWidth: 250,
   sidebarCollapsed: false,
+  homeRecentWidth: 330,
   watcherTimer: null,
   ignoreWatcherUntil: 0,
 };

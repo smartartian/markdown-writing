@@ -7,13 +7,83 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-export function createExportModule({ getCurrentMd, getExportName, renderMarkdown, escapeHtml }) {
-  function exportAsMd() {
-    const blob = new Blob([getCurrentMd()], { type: 'text/markdown;charset=utf-8' });
-    downloadBlob(blob, getExportName('md'));
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('Unable to read exported file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export function createExportModule({
+  getCurrentMd,
+  getExportName,
+  renderMarkdown,
+  escapeHtml,
+  saveExportFile = null,
+}) {
+  function createExportRoot() {
+    const container = document.createElement('div');
+    container.className = 'export-render-root';
+    container.innerHTML = renderMarkdown(getCurrentMd());
+    document.body.appendChild(container);
+    return container;
   }
 
-  function exportAsTxt() {
+  async function renderExportCanvas() {
+    const html2canvas = (await import('html2canvas')).default;
+    const container = createExportRoot();
+    try {
+      return await html2canvas(container, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        windowWidth: 900,
+      });
+    } finally {
+      container.remove();
+    }
+  }
+
+  function canvasToBlob(canvas, type = 'image/png') {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('Unable to create exported file'));
+      }, type);
+    });
+  }
+
+  async function saveBlob(blob, filename) {
+    if (typeof saveExportFile === 'function') {
+      const encoded = await blobToBase64(blob);
+      const path = await saveExportFile(filename, encoded, 'base64');
+      if (path === null) {
+        downloadBlob(blob, filename);
+        return { saved: true, browser: true };
+      }
+      return path ? { saved: true, path } : { canceled: true };
+    }
+    downloadBlob(blob, filename);
+    return { saved: true, browser: true };
+  }
+
+  async function saveContent(content, filename, encoding = 'utf8', mime = 'text/plain;charset=utf-8') {
+    if (typeof saveExportFile === 'function') {
+      const path = await saveExportFile(filename, content, encoding);
+      if (path === null) {
+        downloadBlob(new Blob([content], { type: mime }), filename);
+        return { saved: true, browser: true };
+      }
+      return path ? { saved: true, path } : { canceled: true };
+    }
+    downloadBlob(new Blob([content], { type: mime }), filename);
+    return { saved: true, browser: true };
+  }
+
+  async function exportAsTxt() {
     const text = getCurrentMd()
       .replace(/^#{1,6}\s+/gm, '')
       .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -28,80 +98,43 @@ export function createExportModule({ getCurrentMd, getExportName, renderMarkdown
       .replace(/^>\s+/gm, '')
       .replace(/^-{3,}/gm, '')
       .replace(/\n{3,}/g, '\n\n');
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    downloadBlob(blob, getExportName('txt'));
+    return saveContent(text, getExportName('txt'), 'utf8', 'text/plain;charset=utf-8');
   }
 
   async function exportAsPng() {
-    const html = renderMarkdown(getCurrentMd());
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:48px;background:#fff;color:#2c2e33;font-family:Georgia,serif;font-size:16px;line-height:1.8;';
-    document.body.appendChild(container);
-
-    const height = Math.max(container.scrollHeight, 600);
-    const svgData = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="' + height + '">'
-      + '<foreignObject width="100%" height="100%">'
-      + '<div xmlns="http://www.w3.org/1999/xhtml">' + container.innerHTML + '</div>'
-      + '</foreignObject></svg>';
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const svgUrl = URL.createObjectURL(svgBlob);
-
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 800;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      context.fillStyle = '#ffffff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0);
-      canvas.toBlob((blob) => {
-        downloadBlob(blob, getExportName('png'));
-        URL.revokeObjectURL(svgUrl);
-        document.body.removeChild(container);
-      }, 'image/png');
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(svgUrl);
-      document.body.removeChild(container);
-      alert('图片导出失败，请尝试其他格式');
-    };
-    image.src = svgUrl;
+    const canvas = await renderExportCanvas();
+    const blob = await canvasToBlob(canvas);
+    return saveBlob(blob, getExportName('png'));
   }
 
-  function exportAsPdf() {
-    const html = renderMarkdown(getCurrentMd());
-    const name = getExportName('pdf');
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('请允许弹出窗口以导出 PDF');
-      return;
+  async function exportAsPdf() {
+    const [{ jsPDF }, canvas] = await Promise.all([
+      import('jspdf'),
+      renderExportCanvas(),
+    ]);
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 24;
+    const renderWidth = pageWidth - margin * 2;
+    const renderHeight = canvas.height * renderWidth / canvas.width;
+    const image = canvas.toDataURL('image/png', 0.95);
+    let remainingHeight = renderHeight;
+    let position = margin;
+
+    pdf.addImage(image, 'PNG', margin, position, renderWidth, renderHeight);
+    remainingHeight -= pageHeight - margin * 2;
+    while (remainingHeight > 0) {
+      position = margin - (renderHeight - remainingHeight);
+      pdf.addPage();
+      pdf.addImage(image, 'PNG', margin, position, renderWidth, renderHeight);
+      remainingHeight -= pageHeight - margin * 2;
     }
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head><meta charset="utf-8"><title>${escapeHtml(name)}</title>
-      <style>
-        body { font-family: 'PingFang SC','Songti SC',Georgia,serif; font-size: 16px; line-height: 1.8; color: #2c2e33; padding: 40px 60px; max-width: 780px; margin: 0 auto; }
-        h1,h2,h3,h4,h5,h6 { color: #1a1c20; margin-top: 1.2em; margin-bottom: .5em; }
-        pre { background: #f5f5f8; padding: 12px 16px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
-        code { font-family: 'SF Mono',Menlo,monospace; font-size: 13px; }
-        blockquote { border-left: 3px solid #5c89f2; padding-left: 16px; color: #5a5c62; margin: 12px 0; }
-        img { max-width: 100%; }
-        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-        th,td { border: 1px solid #e2e2e6; padding: 8px 12px; text-align: left; }
-        @media print { body { padding: 0; } }
-      </style></head>
-      <body>${html}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+
+    return saveBlob(pdf.output('blob'), getExportName('pdf'));
   }
 
-  function exportAsWordDocument() {
+  async function exportAsWordDocument() {
     const html = renderMarkdown(getCurrentMd());
     const name = getExportName('doc');
     const docHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
@@ -117,16 +150,16 @@ export function createExportModule({ getCurrentMd, getExportName, renderMarkdown
         table { border-collapse: collapse; } th,td { border: 1px solid #e2e2e6; padding: 6px 10px; }
       </style></head>
       <body>${html}</body></html>`;
-    downloadBlob(new Blob([docHtml], { type: 'application/msword;charset=utf-8' }), name);
+    return saveContent(docHtml, name, 'utf8', 'application/msword;charset=utf-8');
   }
 
-  function handleExport(format) {
+  async function handleExport(format) {
     switch (format) {
-      case 'md': exportAsMd(); break;
-      case 'txt': exportAsTxt(); break;
-      case 'png': void exportAsPng(); break;
-      case 'pdf': exportAsPdf(); break;
-      case 'docx': exportAsWordDocument(); break;
+      case 'txt': return exportAsTxt();
+      case 'png': return exportAsPng();
+      case 'pdf': return exportAsPdf();
+      case 'docx': return exportAsWordDocument();
+      default: throw new Error(`Unsupported export format: ${format}`);
     }
   }
 

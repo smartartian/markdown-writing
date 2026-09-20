@@ -11,6 +11,12 @@ export function createFileTreeModule({
 }) {
   let dialogElement = null;
   let resolveDialog = null;
+  let contextMenuElement = null;
+
+  function closeContextMenu() {
+    contextMenuElement?.remove();
+    contextMenuElement = null;
+  }
 
   function closeDialog(result = null) {
     dialogElement?.remove();
@@ -35,7 +41,7 @@ export function createFileTreeModule({
       dialogElement = document.createElement('div');
       dialogElement.className = 'safety-modal-backdrop file-tree-dialog-backdrop';
       dialogElement.innerHTML = `
-        <section class="safety-modal file-tree-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+        <section class="safety-modal file-tree-dialog ${danger ? 'is-danger' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
           <header class="safety-modal-header">
             <div>
               <h2>${escapeHtml(title)}</h2>
@@ -46,6 +52,11 @@ export function createFileTreeModule({
             </button>
           </header>
           <div class="safety-modal-body">
+            ${danger ? `
+              <div class="file-tree-danger-icon">
+                <i data-lucide="trash-2"></i>
+              </div>
+            ` : ''}
             ${withInput ? `
               <label class="file-tree-dialog-field">
                 <span>${escapeHtml(t('fileTree.fileName'))}</span>
@@ -107,7 +118,7 @@ export function createFileTreeModule({
   function fileActionButton({ action, attribute, value, icon, label }) {
     return `
       <button
-        class="file-tree-action"
+        class="file-tree-action ${action === 'delete' ? 'file-tree-action-danger' : ''}"
         type="button"
         data-tree-action="${action}"
         ${attribute}="${escapeHtml(value)}"
@@ -117,6 +128,58 @@ export function createFileTreeModule({
         <svg data-lucide="${icon}" width="13" height="13" stroke="currentColor" fill="none" stroke-width="1.6"></svg>
       </button>
     `;
+  }
+
+  function contextMenuButton(action, icon, label, danger = false) {
+    return `
+      <button class="file-tree-context-item ${danger ? 'is-danger' : ''}" type="button" data-context-action="${action}">
+        <svg data-lucide="${icon}" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.55"></svg>
+        <span>${escapeHtml(label)}</span>
+      </button>
+    `;
+  }
+
+  function openContextMenu(event, path, isDir) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeContextMenu();
+    contextMenuElement = document.createElement('div');
+    contextMenuElement.className = 'file-tree-context-menu';
+    contextMenuElement.dataset.path = path;
+    contextMenuElement.dataset.isDir = String(isDir);
+    contextMenuElement.innerHTML = isDir
+      ? [
+        contextMenuButton('new', 'file-plus', t('fileTree.newFile')),
+        contextMenuButton('reveal', 'folder-search-2', t('fileTree.context.reveal')),
+      ].join('')
+      : [
+        contextMenuButton('open', 'file-text', t('fileTree.context.open')),
+        contextMenuButton('rename', 'text-cursor-input', t('fileTree.context.rename')),
+        contextMenuButton('reveal', 'folder-search-2', t('fileTree.context.reveal')),
+        contextMenuButton('delete', 'trash-2', t('fileTree.context.delete'), true),
+      ].join('');
+    document.body.appendChild(contextMenuElement);
+    contextMenuElement.addEventListener('click', handleContextMenuClick);
+    lucideIcons();
+
+    const margin = 8;
+    const rect = contextMenuElement.getBoundingClientRect();
+    const left = Math.min(event.clientX, window.innerWidth - rect.width - margin);
+    const top = Math.min(event.clientY, window.innerHeight - rect.height - margin);
+    contextMenuElement.style.left = `${Math.max(margin, left)}px`;
+    contextMenuElement.style.top = `${Math.max(margin, top)}px`;
+  }
+
+  async function revealDocument(path) {
+    try {
+      if (typeof storage.revealDocument !== 'function') {
+        throw new Error('unsupported');
+      }
+      const result = await storage.revealDocument(path);
+      if (result === false) throw new Error('unsupported');
+    } catch (error) {
+      alert(t('fileTree.revealFailed', { message: error?.message || error }));
+    }
   }
 
   function findDocByPath(nodes, path) {
@@ -129,6 +192,15 @@ export function createFileTreeModule({
       }
     }
     return null;
+  }
+
+  function nodeContainsActiveDocument(node) {
+    if (!node || !state.currentDoc) return false;
+    if (!node.isDir) {
+      return node.path === state.currentDoc.path
+        || (node._dbId != null && Number(node._dbId) === Number(state.currentDoc.id));
+    }
+    return (node.children || []).some(nodeContainsActiveDocument);
   }
 
   async function lazyLoadDirChildren(dirPath) {
@@ -182,11 +254,12 @@ export function createFileTreeModule({
     for (const node of nodes) {
       if (node.isDir) {
         const expanded = state.expandedDirs.has(node.path);
+        const containsActive = nodeContainsActiveDocument(node);
         const chevron = expanded ? 'chevron-down' : 'chevron-right';
         const folderIcon = expanded ? 'folder-open' : 'folder';
         const childCount = countMarkdownFiles(node);
         html += `
-          <div class="file-tree-node file-tree-dir-node ${expanded ? 'expanded' : ''}">
+          <div class="file-tree-node file-tree-dir-node ${expanded ? 'expanded' : ''} ${containsActive ? 'contains-active' : ''}">
             <div class="file-tree-row">
               <button class="file-item file-item-dir" type="button" data-dir-path="${escapeHtml(node.path)}">
                 <svg class="file-tree-chevron" data-lucide="${chevron}" width="12" height="12" stroke="currentColor" fill="none" stroke-width="1.7"></svg>
@@ -216,28 +289,12 @@ export function createFileTreeModule({
         html += `
           <div class="file-tree-node file-tree-file-node">
             <div class="file-tree-row">
-              <button class="file-item file-item-file ${isActive ? 'active' : ''}" type="button" data-path="${escapeHtml(node.path)}">
+              <button class="file-item file-item-file ${isActive ? 'active' : ''}" type="button" data-path="${escapeHtml(node.path)}" title="${escapeHtml(t('fileTree.renameHint'))}">
                 <span class="file-tree-chevron-placeholder"></span>
                 <svg class="file-tree-icon" data-lucide="file-text" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
                 <span class="file-item-name">${escapeHtml(fileNameWithoutExt(node.name))}</span>
                 ${size ? `<span class="file-item-size">${escapeHtml(size)}</span>` : ''}
               </button>
-              <div class="file-tree-actions">
-                ${fileActionButton({
-                  action: 'rename',
-                  attribute: 'data-path',
-                  value: node.path,
-                  icon: 'pencil',
-                  label: t('fileTree.renameFile'),
-                })}
-                ${fileActionButton({
-                  action: 'delete',
-                  attribute: 'data-path',
-                  value: node.path,
-                  icon: 'trash-2',
-                  label: t('fileTree.deleteFile'),
-                })}
-              </div>
             </div>
           </div>
         `;
@@ -296,25 +353,76 @@ export function createFileTreeModule({
     }
   }
 
-  async function renameFile(path) {
+  function startInlineRename(path, itemElement) {
     const node = findDocByPath(state.docTree, path);
-    if (!node) return;
-    await saveCurrentDoc();
-    const result = await openTextDialog({
-      title: t('fileTree.renameFile'),
-      description: t('fileTree.renameFileDesc'),
-      value: fileNameWithoutExt(node.name),
-      confirmLabel: t('fileTree.rename'),
-    });
-    if (!result?.confirmed) return;
-    try {
-      const renamed = await storage.renameDocument(path, result.value.trim());
-      await refreshFileTree();
-      if (state.currentDoc?.path === path || Number(state.currentDoc?.id) === Number(node._dbId)) {
-        await openEditor(renamed);
+    const nameElement = itemElement?.querySelector('.file-item-name');
+    if (!node || !nameElement || itemElement.querySelector('.file-tree-rename-input')) return;
+
+    const originalName = fileNameWithoutExt(node.name);
+    const input = document.createElement('input');
+    input.className = 'file-tree-rename-input';
+    input.type = 'text';
+    input.value = originalName;
+    input.setAttribute('aria-label', t('fileTree.renameFile'));
+    nameElement.replaceWith(input);
+    itemElement.classList.add('renaming');
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const restore = () => {
+      if (finished) return;
+      finished = true;
+      input.replaceWith(nameElement);
+      itemElement.classList.remove('renaming');
+    };
+    const commit = async () => {
+      if (finished) return;
+      const nextName = input.value.trim();
+      if (!nextName || nextName === originalName) {
+        restore();
+        return;
       }
-    } catch (error) {
-      alert(t('fileTree.renameFailed', { message: error?.message || error }));
+      finished = true;
+      input.disabled = true;
+      try {
+        const renamed = await storage.renameDocument(path, nextName);
+        if (!renamed) {
+          throw new Error(t('fileTree.alreadyExists'));
+        }
+        await refreshFileTree();
+        if (state.currentDoc?.path === path || Number(state.currentDoc?.id) === Number(node._dbId)) {
+          await openEditor(renamed);
+        }
+      } catch (error) {
+        finished = false;
+        input.disabled = false;
+        input.focus();
+        input.select();
+        alert(t('fileTree.renameFailed', { message: error?.message || error }));
+      }
+    };
+
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void commit();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        restore();
+      }
+    });
+    input.addEventListener('blur', () => {
+      if (!finished) void commit();
+    });
+  }
+
+  async function renameFile(path) {
+    const itemElement = document.querySelector(`.file-item-file[data-path="${CSS.escape(path)}"]`);
+    if (itemElement) {
+      await saveCurrentDoc();
+      startInlineRename(path, itemElement);
     }
   }
 
@@ -355,6 +463,46 @@ export function createFileTreeModule({
       return;
     }
     if (action === 'delete') {
+      await deleteFile(path);
+    }
+  }
+
+  async function handleContextMenuClick(event) {
+    const actionElement = event.target.closest('[data-context-action]');
+    const menu = event.currentTarget;
+    if (!actionElement || !menu) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const action = actionElement.dataset.contextAction;
+    const path = menu.dataset.path;
+    const isDir = menu.dataset.isDir === 'true';
+    closeContextMenu();
+
+    if (action === 'new') {
+      await createFile(path);
+      return;
+    }
+    if (action === 'open') {
+      const doc = findDocByPath(state.docTree, path);
+      if (doc && doc.path !== state.currentDoc?.path) {
+        await saveCurrentDoc();
+        await openEditor(doc);
+      }
+      return;
+    }
+    if (action === 'rename') {
+      const itemElement = document.querySelector(`.file-item-file[data-path="${CSS.escape(path)}"]`);
+      if (itemElement) {
+        await saveCurrentDoc();
+        startInlineRename(path, itemElement);
+      }
+      return;
+    }
+    if (action === 'reveal' && !isDir) {
+      await revealDocument(path);
+      return;
+    }
+    if (action === 'delete' && !isDir) {
       await deleteFile(path);
     }
   }
@@ -400,6 +548,7 @@ export function createFileTreeModule({
 
     const element = event.target.closest('.file-item');
     if (!element) return;
+    if (event.target.closest('.file-tree-rename-input')) return;
     const dirPath = element.dataset.dirPath;
     if (dirPath) {
       if (state.expandedDirs.has(dirPath)) {
@@ -414,6 +563,16 @@ export function createFileTreeModule({
 
     const path = element.dataset.path;
     const doc = findDocByPath(state.docTree, path);
+    if (
+      doc
+      && element.classList.contains('active')
+      && event.target.closest('.file-item-name')
+    ) {
+      event.preventDefault();
+      await saveCurrentDoc();
+      startInlineRename(path, element);
+      return;
+    }
     if (doc && doc.path !== state.currentDoc?.path) {
       await saveCurrentDoc();
       void openEditor(doc);
@@ -425,6 +584,30 @@ export function createFileTreeModule({
     if (!nav || nav.dataset.fileTreeBound === 'true') return;
     nav.dataset.fileTreeBound = 'true';
     nav.addEventListener('click', handleFileTreeClick);
+    nav.addEventListener('dblclick', event => {
+      const element = event.target.closest('.file-item-file');
+      if (!element || event.target.closest('.file-tree-rename-input')) return;
+      const path = element.dataset.path;
+      if (!path) return;
+      event.preventDefault();
+      void saveCurrentDoc().then(() => startInlineRename(path, element));
+    });
+    nav.addEventListener('contextmenu', event => {
+      const element = event.target.closest('.file-item');
+      if (!element) return;
+      const path = element.dataset.dirPath || element.dataset.path;
+      if (!path) return;
+      openContextMenu(event, path, Boolean(element.dataset.dirPath));
+    });
+    if (document.documentElement.dataset.fileTreeContextMenuBound !== 'true') {
+      document.documentElement.dataset.fileTreeContextMenuBound = 'true';
+      document.addEventListener('click', closeContextMenu);
+      document.addEventListener('scroll', closeContextMenu, true);
+      window.addEventListener('resize', closeContextMenu);
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeContextMenu();
+      });
+    }
 
     const newFileButton = document.querySelector('#sidebar-new-file-btn');
     if (newFileButton && newFileButton.dataset.fileTreeBound !== 'true') {
@@ -435,11 +618,19 @@ export function createFileTreeModule({
     }
   }
 
+  function revealActiveFileInTree() {
+    const nav = document.querySelector('#file-tree-nav');
+    const active = nav?.querySelector('.file-item-file.active');
+    if (!nav || !active) return;
+    active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   return {
     findDocByPath,
     lazyLoadDirChildren,
     buildFileTreeHtml,
     renderFileTreeNav,
     hookFileTreeEvents,
+    revealActiveFileInTree,
   };
 }

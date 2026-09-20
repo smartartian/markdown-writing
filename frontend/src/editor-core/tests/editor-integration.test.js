@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { marked } from 'marked';
 import {
+  createMarkdownSeparatorBlock,
+  preserveBlockBoundaryNewlines,
   parseMarkdownBlocksWithCore,
   parseMarkdownBlocksWithFallback,
 } from '../../modules/editor.js';
-import { serializeDocument } from '../index.js';
+import { createEditorSession, parseMarkdown, serializeDocument } from '../index.js';
 
 const fixtures = [
   '# Heading\n\nParagraph',
@@ -75,4 +77,29 @@ test('render parser entry: keeps IDs when block text changes in place', () => {
   const second = parseMarkdownBlocksWithCore('# Heading\n\nParagraph changed', first.blocks);
   assert.equal(second.blocks[0].blockId, first.blocks[0].blockId);
   assert.equal(second.blocks[1].blockId, first.blocks[1].blockId);
+});
+
+test('render parser entry: edits preserve structural newlines around blocks', () => {
+  const session = createEditorSession(parseMarkdown('# Heading\n\nParagraph\n'));
+  const heading = session.document.blocks[0];
+  const nextRaw = preserveBlockBoundaryNewlines(heading.raw, '# Changed heading');
+  const transaction = session.createTransaction({ source: 'test' }).replace(heading.id, nextRaw);
+  const result = session.apply(transaction);
+
+  assert.equal(serializeDocument(result.document), '# Changed heading\n\nParagraph\n');
+});
+
+test('block split writes a Markdown separator between visible blocks', () => {
+  const session = createEditorSession(parseMarkdown('# Heading'));
+  const heading = session.document.blocks[0];
+  const transaction = session.createTransaction()
+    .split(heading.id, heading.raw.length);
+  transaction.insert(1, createMarkdownSeparatorBlock());
+
+  const split = session.apply(transaction);
+  assert.equal(serializeDocument(split.document), '# Heading\n\n');
+
+  const nextBlock = split.document.blocks.find(block => !block.attrs?.separator && block.id !== heading.id);
+  const edited = session.apply(session.createTransaction().replace(nextBlock.id, 'Paragraph'));
+  assert.equal(serializeDocument(edited.document), '# Heading\n\nParagraph');
 });
