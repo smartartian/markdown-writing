@@ -23,7 +23,9 @@ test('markdown renderer wraps tables and preserves alignment', () => {
 test('markdown renderer keeps gfm task lists and strikethrough', () => {
   const html = renderer.render('- [x] done\n- [ ] todo\n\n~~removed~~\n\n==highlighted==');
 
-  assert.match(html, /type="checkbox"/);
+  // 勾选框必须带 md-task 类（样式定位）并且是 disabled 的只读控件。
+  assert.match(html, /<input [^>]*type="checkbox" class="md-task">/);
+  assert.match(html, /<input checked="" disabled=""/);
   assert.match(html, /<del>removed<\/del>/);
   assert.match(html, /<mark class="md-highlight">highlighted<\/mark>/);
 });

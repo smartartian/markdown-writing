@@ -84,6 +84,12 @@ ${bodyHtml}</tbody>
 `;
   };
 
+  // GFM 任务列表勾选框：marked 默认产出 <input disabled type="checkbox">，
+  // 这里只补一个类名供样式定位（反推回 Markdown 由 turndown 的 gfm 规则负责）。
+  renderer.checkbox = function renderCheckbox({ checked }) {
+    return `<input ${checked ? 'checked="" ' : ''}disabled="" type="checkbox" class="md-task"> `;
+  };
+
   renderer.tablecell = function renderTableCell({ tokens, header, align }) {
     const tag = header ? 'th' : 'td';
     const scope = header ? ' scope="col"' : '';

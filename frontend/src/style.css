@@ -1323,6 +1323,23 @@ select,
   background: color-mix(in srgb, #f4c95d 38%, transparent);
 }
 
+/* GFM 任务列表勾选框（渲染层保留 <input type="checkbox" disabled>，见 markdown/renderer.js） */
+.md-task {
+  margin-left: 0.1em;
+  vertical-align: -0.05em;
+  accent-color: var(--primary);
+  /* 控件自身不接收指针事件：disabled 的 <input> 在部分浏览器里既不派发 mousedown/click，
+     也不参与命中测试，点击事件会「消失」。让它透明，点击落到 li/p 上，
+     由 main.js 的 onRenderedCheckboxMousedown 按坐标命中勾选框再走模型命令。 */
+  pointer-events: none;
+}
+
+/* 「可以点」的指针提示挂在任务项上，因为勾选框本身已经不参与命中测试。 */
+.block-rendered li:has(input.md-task),
+.block-rendered p:has(input.md-task) {
+  cursor: pointer;
+}
+
 /* 标题块样式 */
 .block-heading .block-source {
   font-weight: 700;

@@ -293,24 +293,14 @@ function displayShortcut(shortcut) {
 function matchesShortcut(event, shortcut) {
   if (!shortcut) return false;
   const eventKey = String(event.key || '').toLowerCase();
-  const slashParts = String(shortcut)
-    .split('/')
-    .map(part => part.trim())
-    .filter(Boolean);
-  let combinations = slashParts;
-
-  if (slashParts.length > 1) {
-    const lastParts = slashParts[slashParts.length - 1].split('+').map(part => part.trim());
-    const finalKey = lastParts.pop();
-    const trailingModifiers = lastParts.slice(1);
-    combinations = slashParts.map((part, index) => {
-      const leadingParts = part.split('+').map(token => token.trim()).filter(Boolean);
-      const modifiers = index === slashParts.length - 1
-        ? leadingParts
-        : [...leadingParts, ...trailingModifiers];
-      return [...new Set([...modifiers, finalKey].filter(Boolean))].join('+');
-    });
-  }
+  const source = String(shortcut);
+  // 先把「最终按键」摘出来：它本身可能就是 '/'（Cmd+/、Cmd/Ctrl+/），不能参与按 / 的拆分，
+  // 否则 'Cmd+/' 会被拆成 ['Cmd+']，最终按键变成 "cmd"，快捷键永远匹配不上。
+  const lastPlus = source.lastIndexOf('+');
+  const finalKey = lastPlus === -1 ? '' : source.slice(lastPlus + 1).trim();
+  const combinations = finalKey
+    ? source.slice(0, lastPlus).split('/').map(part => `${part.trim()}+${finalKey}`).filter(Boolean)
+    : [source];
 
   return combinations
     .some(combination => {

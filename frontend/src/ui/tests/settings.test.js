@@ -76,6 +76,21 @@ test('settings: shortcut matching supports platform alternatives and exact modif
     altKey: false,
     shiftKey: true,
   }, 'Cmd/Ctrl+S'), false);
+
+test('matchesShortcut: slash-key shortcuts keep the final key', () => {
+  assert.equal(matchesShortcut({
+    key: '/', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false,
+  }, 'Cmd+/'), true);
+  assert.equal(matchesShortcut({
+    key: '/', metaKey: false, ctrlKey: true, altKey: false, shiftKey: false,
+  }, 'Cmd/Ctrl+/'), true);
+  assert.equal(matchesShortcut({
+    key: '/', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false,
+  }, 'Cmd/Ctrl+/'), true);
+  assert.equal(matchesShortcut({
+    key: '/', metaKey: false, ctrlKey: false, altKey: false, shiftKey: false,
+  }, 'Cmd+/'), false);
+});
 });
 
 test('settings: search query matching is case-insensitive and token based', () => {

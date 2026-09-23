@@ -9,6 +9,9 @@ function globalOffset(position) {
     : position.offset;
 }
 
+// 任务项的行首标记（允许引用前缀 `> ` 与缩进）：`- [ ] x` / `> 1. [x] y`
+const TASK_LINE_PATTERN = /^([ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/;
+
 function selectionRange(session) {
   const selection = session.selection;
   if (!selection || selection.anchor.blockId !== selection.head.blockId) return null;
@@ -28,10 +31,11 @@ function applyReplace(session, blockId, raw, caret, meta = {}) {
   const result = session.apply(transaction, {
     coalesceKey: meta.coalesceKey || null,
   });
-  session.selection = createSelection(
+  // 走 setSelection：命令改完之后的光标要能被撤销/重做还原。
+  session.setSelection(createSelection(
     createPosition(blockId, caret),
     createPosition(blockId, caret),
-  );
+  ));
   return result;
 }
 
@@ -42,9 +46,12 @@ export function createBuiltinCommands() {
     const range = selectionRange(session);
     if (!range) return null;
     const selected = range.block.raw.slice(range.start, range.end);
-    const replacement = marker + (selected || '文本') + marker;
+    // 没有选中内容时插入占位文本（沿用应用原有习惯：空标记对 ``、**** 会被 Markdown 解析成
+    // 代码块 / 分割线）。光标停在占位文本之后、闭合标记之前，接着输入的内容仍落在标记里。
+    const text = selected || '文本';
+    const replacement = marker + text + marker;
     const raw = range.block.raw.slice(0, range.start) + replacement + range.block.raw.slice(range.end);
-    return applyReplace(session, range.block.id, raw, range.start + replacement.length, {
+    return applyReplace(session, range.block.id, raw, range.start + marker.length + text.length, {
       source: 'command',
       coalesceKey: null,
     });
@@ -108,6 +115,23 @@ export function createBuiltinCommands() {
   registry.register('toggleOrderedList', ({ session }) => toggleLinePrefix(session, /^(?:[-*+]|\d+[.)])\s+/, '1. '));
   registry.register('toggleTaskList', ({ session }) => toggleLinePrefix(session, /^[-*+]\s+\[[ xX]\]\s+/, '- [ ] '));
 
+  // 勾选框点击（可视区点 `.md-task` 时走这里）：把光标所在行的 `[ ]` / `[x]` 互换。
+  // `[ ]` 与 `[x]` 等长，光标可以原地不动。
+  registry.register('toggleTaskChecked', ({ session }) => {
+    const range = selectionRange(session);
+    if (!range) return null;
+    const raw = range.block.raw;
+    const lineStart = raw.lastIndexOf('\n', Math.max(0, range.start - 1)) + 1;
+    const lineEndIndex = raw.indexOf('\n', lineStart);
+    const lineEnd = lineEndIndex === -1 ? raw.length : lineEndIndex;
+    const line = raw.slice(lineStart, lineEnd);
+    const match = TASK_LINE_PATTERN.exec(line);
+    if (!match) return null;
+    const nextLine = `${match[1]}[${match[2].toLowerCase() === 'x' ? ' ' : 'x'}]${line.slice(match[0].length)}`;
+    const nextRaw = raw.slice(0, lineStart) + nextLine + raw.slice(lineEnd);
+    return applyReplace(session, range.block.id, nextRaw, range.start, { source: 'command' });
+  });
+
   registry.register('insertMdx', ({ session }) => {
     const selection = session.selection;
     const block = selection ? session.document.getBlock(selection.anchor.blockId) : null;
@@ -167,18 +191,32 @@ function toggleLinePrefix(session, pattern, prefix) {
   return applyReplace(session, range.block.id, raw, raw.length, { source: 'command' });
 }
 
+// 上/下移动块。文档里块的「空行」是独立的 separator 块（`- blocks: [段落, '\n\n', 段落]`），
+// 所以不能直接拿数组下标的前后一个块当邻居：那只会把块挪到空行前面，可视顺序完全没变
+// （以前的 Alt+Up 就是这样失效的，块跨到 separator 另一侧，肉眼看不到任何变化）。
+// 这里只按可见块找邻居，交换后把原来夹在两块之间的 separator 依次插回下面那块之前，
+// 空行位置就仍然留在两块中间。
 function moveBlock(session, direction) {
   const selection = session.selection;
   if (!selection) return null;
   const block = session.document.getBlock(selection.anchor.blockId);
   if (!block) return null;
-  const index = session.document.getBlockIndex(block.id);
-  const target = session.document.blocks[index + direction];
+  const visible = session.document.blocks.filter(item => !item.attrs?.separator);
+  const index = visible.findIndex(item => item.id === block.id);
+  const target = index === -1 ? null : visible[index + direction];
   if (!target) return null;
-  const transaction = session.createTransaction({ source: 'command' }).move(
-    block.id,
-    direction < 0 ? target.id : target.id === block.id ? null : session.document.blocks[index + direction + 1]?.id ?? null,
-  );
+
+  // 向上移动：被移动的块最终在上；向下移动：被移动的块最终在下。
+  const top = direction < 0 ? block : target;
+  const bottom = direction < 0 ? target : block;
+  const topIndex = session.document.getBlockIndex(top.id);
+  const bottomIndex = session.document.getBlockIndex(bottom.id);
+  const between = session.document.blocks
+    .slice(Math.min(topIndex, bottomIndex) + 1, Math.max(topIndex, bottomIndex))
+    .filter(item => item.attrs?.separator);
+
+  const transaction = session.createTransaction({ source: 'command' }).move(top.id, bottom.id);
+  for (const separator of between) transaction.move(separator.id, bottom.id);
   return session.apply(transaction);
 }
 

@@ -22,7 +22,7 @@ export function serializeInline(nodes = []) {
       case INLINE_TYPES.STRIKE:
         return `~~${serializeInline(node.children)}~~`;
       case INLINE_TYPES.MARK:
-        return `::${serializeInline(node.children)}::`;
+        return `==${serializeInline(node.children)}==`;
       case 'math':
         return `$${node.text}$`;
       case 'footnote':

@@ -76,6 +76,49 @@ test('session: structural split generates changed IDs for both blocks', () => {
   ));
 });
 
+test('session: setSelection rewrites the latest history entry so redo restores the caret', () => {
+  const session = createEditorSession(createDocument(), collapsedSelection('a', 0));
+  session.apply(
+    session.createTransaction().replace('a', 'alpha!'),
+    { coalesceKey: 'input:a', now: 1000 },
+  );
+  // 输入路径自己知道光标落点（DOM 真值），比 mapSelectionThroughTransaction 的平移更准。
+  const caret = collapsedSelection('a', 6);
+  session.setSelection(caret);
+
+  assert.deepEqual(session.undo().selection, collapsedSelection('a', 0));
+
+  const redone = session.redo();
+  assert.deepEqual(redone.selection, caret);
+  assert.deepEqual(session.selection, caret);
+});
+
+test('session: setSelection without history keeps only the current selection', () => {
+  const session = createEditorSession(createDocument(), collapsedSelection('a', 0));
+  const caret = collapsedSelection('b', 4);
+  assert.deepEqual(session.setSelection(caret), caret);
+  assert.deepEqual(session.selection, caret);
+  assert.equal(session.canUndo(), false);
+});
+
+test('session: coalesced input keeps the last declared caret', () => {
+  const session = createEditorSession(createDocument(), collapsedSelection('a', 5));
+  session.apply(
+    session.createTransaction().replace('a', 'alpha1'),
+    { coalesceKey: 'input:a', now: 1000 },
+  );
+  session.apply(
+    session.createTransaction().replace('a', 'alpha12'),
+    { coalesceKey: 'input:a', now: 1100 },
+  );
+  const caret = collapsedSelection('a', 7);
+  session.setSelection(caret);
+
+  session.undo();
+  assert.equal(session.document.toMarkdown(), 'alphabeta');
+  assert.deepEqual(session.redo().selection, caret);
+});
+
 test('session: persisted version tracks save coordination', () => {
   const session = createEditorSession(createDocument(), collapsedSelection('a', 5));
   assert.equal(session.isDirty(), false);

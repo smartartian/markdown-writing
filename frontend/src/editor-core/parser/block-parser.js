@@ -1,6 +1,6 @@
 import { createBlockId } from '../model/id.js';
 import { MarkdownDocument } from '../model/document.js';
-import { BLOCK_TYPES, createBlock } from '../model/types.js';
+import { BLOCK_TYPES, createBlock, isTableSeparatorLine } from '../model/types.js';
 import { parseInline } from './inline-parser.js';
 
 function splitLines(source) {
@@ -64,8 +64,9 @@ function isIndentedContinuation(line) {
   return /^( {2,}|\t)/.test(line.text);
 }
 
+// 与模型层（model/types.js 的 isTableSeparatorLine）共用同一条分隔行规则。
 function isTableSeparator(line) {
-  return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(line.text);
+  return isTableSeparatorLine(line.text);
 }
 
 function isHtmlStart(line) {

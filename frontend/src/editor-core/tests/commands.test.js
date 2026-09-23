@@ -8,6 +8,7 @@ import {
   createEditorSession,
   createPosition,
   createSelection,
+  parseMarkdown,
 } from '../index.js';
 
 function createSession(raw = 'hello world', selection = null) {
@@ -124,4 +125,115 @@ test('commands: insert MDX component', () => {
   const commands = createBuiltinCommands();
   commands.execute('insertMdx', { session });
   assert.match(session.document.toMarkdown(), /<Component \/>/);
+});
+
+test('commands: inline format with no selection falls back to placeholder text', () => {
+  const session = createSession('hello', collapsedSelection('a', 5));
+  const commands = createBuiltinCommands();
+  commands.execute('toggleStrong', { session });
+  assert.equal(session.document.toMarkdown(), 'hello**文本**');
+  // 光标停在占位文本之后、闭合标记之前：接着输入的内容仍落在标记里
+  assert.equal(session.selection.anchor.offset, 9);
+  assert.equal(session.selection.head.offset, 9);
+});
+
+test('commands: inline format keeps the caret inside the closing marker', () => {
+  const session = createSession('hello', createSelection(
+    createPosition('a', 0),
+    createPosition('a', 5),
+  ));
+  const commands = createBuiltinCommands();
+  commands.execute('toggleHighlight', { session });
+  assert.equal(session.document.toMarkdown(), '==hello==');
+  assert.equal(session.selection.anchor.offset, 7);
+});
+
+test('commands: applied format is restorable through undo/redo', () => {
+  const session = createSession('hello', createSelection(
+    createPosition('a', 0),
+    createPosition('a', 5),
+  ));
+  const commands = createBuiltinCommands();
+  commands.execute('toggleStrike', { session });
+  assert.equal(session.document.toMarkdown(), '~~hello~~');
+  assert.equal(session.undo().document.toMarkdown(), 'hello');
+  const redone = session.redo();
+  assert.equal(redone.document.toMarkdown(), '~~hello~~');
+  assert.deepEqual(redone.selection, session.selection);
+});
+
+function sessionFromMarkdown(markdown, selectionIndex = 0) {
+  const session = createEditorSession(parseMarkdown(markdown), null);
+  const visible = session.document.blocks.filter(block => !block.attrs?.separator);
+  const target = visible[selectionIndex];
+  if (target) session.selection = collapsedSelection(target.id, 0);
+  return session;
+}
+
+test('commands: move block up and down swaps visible blocks', () => {
+  // 回归：块之间的空行是独立的 separator 块，以前按数组下标取邻居，Alt+Up 只会把块挪到
+  // separator 另一侧 —— 可视顺序完全没变，用户看到的是「快捷键没反应」。
+  const commands = createBuiltinCommands();
+
+  const up = sessionFromMarkdown('one\n\n\ntwo', 1);
+  commands.execute('moveBlockUp', { session: up });
+  assert.equal(up.document.toMarkdown(), 'two\n\none\n');
+
+  const down = sessionFromMarkdown('one\n\n\ntwo', 0);
+  commands.execute('moveBlockDown', { session: down });
+  assert.equal(down.document.toMarkdown(), 'two\n\none\n');
+
+  const middle = sessionFromMarkdown('a\n\n\nb\n\n\nc', 1);
+  commands.execute('moveBlockUp', { session: middle });
+  assert.equal(middle.document.toMarkdown(), 'b\n\n\na\n\n\nc');
+});
+
+test('commands: move block keeps blank-line runs between the swapped blocks', () => {
+  const commands = createBuiltinCommands();
+  const session = sessionFromMarkdown('a\n\n\n\n\nb', 1);
+  commands.execute('moveBlockUp', { session });
+  assert.equal(session.document.toMarkdown(), 'b\n\n\n\na\n');
+});
+
+test('commands: move block does nothing at the document edges', () => {
+  const commands = createBuiltinCommands();
+  const session = sessionFromMarkdown('a\n\n\nb', 0);
+  assert.equal(commands.execute('moveBlockUp', { session }), null);
+  assert.equal(session.document.toMarkdown(), 'a\n\n\nb');
+
+  const last = sessionFromMarkdown('a\n\n\nb', 1);
+  assert.equal(commands.execute('moveBlockDown', { session: last }), null);
+  assert.equal(last.document.toMarkdown(), 'a\n\n\nb');
+});
+
+test('commands: toggle task checkbox state on the caret line', () => {
+  const commands = createBuiltinCommands();
+  const session = createSession('- [ ] todo', collapsedSelection('a', 4));
+
+  assert.ok(commands.execute('toggleTaskChecked', { session }));
+  assert.equal(session.document.toMarkdown(), '- [x] todo');
+
+  commands.execute('toggleTaskChecked', { session });
+  assert.equal(session.document.toMarkdown(), '- [ ] todo');
+});
+
+test('commands: toggle task checkbox only touches the line under the caret', () => {
+  const commands = createBuiltinCommands();
+  const raw = '- [ ] one\n- [x] two';
+  const session = createSession(raw, collapsedSelection('a', 6));
+
+  commands.execute('toggleTaskChecked', { session });
+  assert.equal(session.document.toMarkdown(), '- [x] one\n- [x] two');
+
+  // 引用里的任务项同样支持
+  const quoted = createSession('> - [ ] quoted', collapsedSelection('a', 6));
+  commands.execute('toggleTaskChecked', { session: quoted });
+  assert.equal(quoted.document.toMarkdown(), '> - [x] quoted');
+});
+
+test('commands: toggle task checkbox ignores lines without a checkbox', () => {
+  const commands = createBuiltinCommands();
+  const session = createSession('普通段落', collapsedSelection('a', 2));
+  assert.equal(commands.execute('toggleTaskChecked', { session }), null);
+  assert.equal(session.document.toMarkdown(), '普通段落');
 });

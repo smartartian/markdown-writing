@@ -19,7 +19,6 @@ import {
 } from './editor-core/selection/index.js';
 import { createCompositionController } from './editor-core/composition/index.js';
 import { createBuiltinCommands } from './editor-core/commands/index.js';
-import { BLOCK_TYPES } from './editor-core/model/types.js';
 import { parseMarkdown } from './editor-core/parser/block-parser.js';
 import { createEditorSession } from './editor-core/session/index.js';
 import { serializeDocument } from './editor-core/serializer/markdown-serializer.js';
@@ -34,7 +33,7 @@ import { createExportModule } from './modules/export';
 import { createFileTreeModule } from './modules/file-tree';
 import { createSafetyModule } from './modules/safety';
 import { createSettingsModule, matchesShortcut } from './modules/settings';
-import { createAppPluginRuntime } from './plugin-runtime';
+import { compareVersions, createAppPluginRuntime } from './plugin-runtime';
 import { isBrowserMode, storage } from './services/document-store';
 import { brandHeroHtml, DEFAULT_LOGO_ID, getLogoUrl } from './ui/brand';
 import { autoResizeTextarea, debounce, escapeHtml, qs } from './ui/dom';
@@ -49,7 +48,13 @@ import {
   renderOutlineTree,
 } from './ui/outline';
 import { expandDocumentParents } from './ui/paths.js';
-import { getEditableTextOffset, renderedHtmlToMarkdown } from "./ui/wysiwyg.js";
+import {
+  getEditableTextOffset,
+  getRenderedTextLength,
+  isLayoutWhitespaceNode,
+  renderedHtmlToMarkdown,
+} from './ui/wysiwyg.js';
+import { planPaste } from './ui/paste.js';
 
 const {
   selectDocumentDir: NativeSelectDocumentDir,
@@ -125,17 +130,6 @@ async function checkForUpdate() {
   } catch (e) {
     return { error: '网络请求失败' };
   }
-}
-
-function compareVersions(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] || 0, nb = pb[i] || 0;
-    if (na > nb) return 1;
-    if (na < nb) return -1;
-  }
-  return 0;
 }
 
 // ============================================================
@@ -300,28 +294,6 @@ async function scheduleEditorShadowComparison(markdown) {
   }
 }
 
-// 重新渲染块编辑器（保留当前激活块的位置）
-function refreshBlockEditor() {
-  const container = qs('#block-editor');
-  if (!container) return;
-  const md = collectBlocksMarkdown();
-  activeBlockIndex = Math.max(0, activeBlockIndex);
-  container.innerHTML = buildBlockEditorHtml(md);
-  hookBlockEvents();
-  // 聚焦激活块
-  const activeEl = container.querySelector('.block.active .block-rendered');
-  if (activeEl && activeEl.contentEditable === 'true') {
-    activeEl.focus();
-    // 光标放到末尾
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(activeEl);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-}
-
 // 激活指定块
 async function activateBlock(index) {
   const container = qs('#block-editor');
@@ -377,6 +349,32 @@ async function activateBlock(index) {
       sel.addRange(range);
     }
   }
+}
+
+// 用模型块直接建 DOM 元素。
+// 不能拿「重新解析 markdown 得到的 HTML」当模板按 id 查：那份 HTML 的 data-block-id 来自解析器，
+// 和会话里新生成的块 id（例如 Enter 分块产生的块）对不上，查不到就会漏块——
+// 表现出来就是「撤销到底再重做，块没回来」（模型有、DOM 没有）。
+function createBlockElement(block) {
+  const element = document.createElement('div');
+  element.className = 'block';
+  element.dataset.blockId = block.id;
+  element.dataset.blockType = block.type;
+
+  const source = document.createElement('div');
+  source.className = 'block-source';
+  source.contentEditable = 'false';
+  source.hidden = true;
+  source.textContent = block.raw || '\u200B';
+
+  const rendered = document.createElement('div');
+  rendered.className = 'block-rendered';
+  rendered.contentEditable = 'false';
+  rendered.spellcheck = true;
+  rendered.innerHTML = '<p><br></p>';
+
+  element.append(source, rendered);
+  return element;
 }
 
 // 创建新块（在指定索引后）
@@ -461,8 +459,14 @@ function hookBlockEvents() {
 
     const rendered = el.querySelector('.block-rendered');
     if (rendered) {
+      // 勾选框是 disabled 的 <input>：Chromium 不会为它派发 click/mousedown，
+      // 事件直接落到容器上，所以只能在容器里用坐标命中检测判断「点的是不是勾选框」。
+      rendered.removeEventListener('mousedown', onRenderedCheckboxMousedown, true);
+      rendered.addEventListener('mousedown', onRenderedCheckboxMousedown, true);
       rendered.removeEventListener('input', onRenderedBlockInput);
       rendered.addEventListener('input', onRenderedBlockInput);
+      rendered.removeEventListener('beforeinput', onRenderedBlockBeforeInput);
+      rendered.addEventListener('beforeinput', onRenderedBlockBeforeInput);
       rendered.removeEventListener('keydown', onRenderedBlockKeydown);
       rendered.addEventListener('keydown', onRenderedBlockKeydown);
       rendered.removeEventListener('paste', onRenderedBlockPaste);
@@ -484,7 +488,10 @@ function hookBlockEvents() {
 function onBlockClick(e) {
   const block = e.currentTarget;
   const idx = parseInt(block.dataset.blockIndex);
-  if (!isNaN(idx) && idx !== activeBlockIndex) {
+  // 以 DOM 上的 .active 为准：activeBlockIndex 可能因为别处的夹紧逻辑与 DOM 脱节，
+  // 一旦脱节，点击「下一个」块会被误判为「已经激活」而毫无反应。
+  const activeIndex = Number(qs('#block-editor .block.active')?.dataset.blockIndex);
+  if (!isNaN(idx) && idx !== activeIndex) {
     captureBlockSelection();
     void activateBlock(idx);
   }
@@ -556,23 +563,20 @@ function onBlockInput(e) {
   scheduleAutoSave();
 }
 
-function renderedBlockToMarkdown(rendered) {
-  const html = rendered.innerHTML;
-  const hasRichMarkup = /<(?:strong|em|code|a|img|mark|del|ul|ol|li|blockquote|pre|table)\b/i.test(html);
-  const isPlainParagraph = /^\s*<p(?:\s[^>]*)?>[\s\S]*<\/p>\s*$/i.test(html);
-  if (isPlainParagraph && !hasRichMarkup) {
-    return (rendered.innerText || rendered.textContent || "").replace(/\u200B/g, "").trimEnd();
-  }
-  return htmlToMarkdown(html);
-}
-
 function syncRenderedBlock(block) {
   if (!block) return Promise.resolve();
   const previous = block.richSyncPromise || Promise.resolve();
   const current = previous
-    .catch(() => {})
+    .catch(error => {
+      console.error('[editor] previous block sync failed', error);
+    })
     .then(() => syncRenderedBlockNow(block))
-    .catch(() => {});
+    .catch(error => {
+      // 不能再静默吞掉：同步失败的后果是「DOM 有内容、模型没有」，保存时会丢数据。
+      console.error('[editor] block sync failed', error);
+      const editor = qs('#block-editor');
+      if (editor) editor.dataset.syncError = String(error?.message || error);
+    });
   block.richSyncPromise = current;
   void current.finally(() => {
     if (block.richSyncPromise === current) delete block.richSyncPromise;
@@ -588,7 +592,10 @@ async function syncRenderedBlockNow(block) {
   if (!rendered || !source || !blockId) return;
 
   const modelBlock = state.editorSession.document.getBlock(blockId);
-  const raw = await renderedBlockToMarkdown(rendered);
+  const raw = await renderedHtmlToMarkdown(
+    rendered.innerHTML,
+    rendered.innerText || rendered.textContent || '',
+  );
   const nextRaw = modelBlock
     ? preserveBlockBoundaryNewlines(modelBlock.raw, raw)
     : raw;
@@ -613,21 +620,39 @@ async function syncRenderedBlockNow(block) {
 
   const selection = window.getSelection();
   if (selection?.anchorNode && rendered.contains(selection.anchorNode)) {
-    const offset = getEditableTextOffset(rendered, selection.anchorNode, selection.anchorOffset);
-    state.selection = createSelection(
+    // DOM 文本里没有 `#`、`> `、`- ` 这些前缀，直接当成模型偏移会让后续 restoreBlockSelection
+    // 把光标放回行首（列表/标题/引用里打字会出现字符插到前面的现象），所以这里补上前缀。
+    const offset = getEditableTextOffset(rendered, selection.anchorNode, selection.anchorOffset)
+      + blockMarkdownPrefix(modelBlock);
+    setModelSelection(createSelection(
       createPosition(blockId, offset),
       createPosition(blockId, offset),
-    );
-    state.editorSession.selection = state.selection;
+    ));
   }
   const nextModelBlock = transactionResult?.document.getBlock(blockId);
-  if (nextModelBlock && nextModelBlock.type !== modelBlock?.type) {
-    syncIncrementalBlocks(transactionResult.changedBlockIds);
+  // 手打的任务列表标记（`- [ ] x`）与普通列表是同一个块类型，不会走上面的类型变化分支，
+  // 可视区就会一直停在字面量 `[ ]` 上；这里补一次重渲染把勾选框画出来。
+  const currentModelBlock = nextModelBlock || state.editorSession.document.getBlock(blockId);
+  const typedTaskMarker = currentModelBlock?.type === 'list'
+    && !rendered.querySelector('input[type="checkbox"]')
+    && /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[[ xX]\][ \t]/.test(currentModelBlock.raw || '');
+  if ((nextModelBlock && nextModelBlock.type !== modelBlock?.type) || typedTaskMarker) {
+    syncIncrementalBlocks(transactionResult?.changedBlockIds || [blockId]);
   }
   state.isDirty = true;
   updateTitleDirty();
   updateWordCount();
   scheduleAutoSave();
+}
+
+function onRenderedBlockBeforeInput(event) {
+  // 浏览器原生撤销会直接改 DOM（且只撤一个字符），与模型撤销栈脱节；一律改走模型级撤销/重做。
+  if (event.inputType !== 'historyUndo' && event.inputType !== 'historyRedo') return;
+  event.preventDefault();
+  const action = event.inputType === 'historyUndo' ? 'undo' : 'redo';
+  const session = state.editorSession;
+  if (!session) return;
+  applyHistoryResult(action === 'undo' ? session.undo() : session.redo(), action);
 }
 
 function onRenderedBlockInput(event) {
@@ -647,10 +672,121 @@ function onRenderedBlockBlur(event) {
   if (block) void syncRenderedBlock(block);
 }
 
-function onRenderedBlockPaste() {
-  requestAnimationFrame(() => {
-    const block = document.activeElement?.closest?.('.block');
-    if (block) void syncRenderedBlock(block);
+function renderedSelectionOffsets(rendered) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  if (!rendered.contains(range.startContainer) || !rendered.contains(range.endContainer)) return null;
+  return {
+    start: getEditableTextOffset(rendered, range.startContainer, range.startOffset),
+    end: getEditableTextOffset(rendered, range.endContainer, range.endOffset),
+  };
+}
+
+// 本块里第 index 个勾选框 → 模型 raw 里第 index 行任务项的 `[ ]` 中间那个字符的偏移。
+// 可视区 DOM 不保留 Markdown 前缀，且列表项结构里混着排版空白，只能按「第几个」对齐。
+function taskMarkerOffset(rendered, modelBlock, checkbox) {
+  const boxes = [...rendered.querySelectorAll('input.md-task')];
+  const index = boxes.indexOf(checkbox);
+  if (index < 0) return null;
+  const raw = modelBlock.raw || '';
+  const pattern = /^([ \t]*(?:>[ \t]*)*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/;
+  const offsets = [];
+  let lineStart = 0;
+  for (;;) {
+    const lineEndIndex = raw.indexOf('\n', lineStart);
+    const lineEnd = lineEndIndex === -1 ? raw.length : lineEndIndex;
+    const match = pattern.exec(raw.slice(lineStart, lineEnd));
+    if (match) offsets.push(lineStart + match[1].length + 1);
+    if (lineEndIndex === -1) break;
+    lineStart = lineEndIndex + 1;
+  }
+  return offsets[index] ?? null;
+}
+
+// disabled 的 <input> 不参与命中测试（elementFromPoint / elementsFromPoint 都会跳过它），
+// 所以只能拿勾选框自己的矩形去比对坐标。
+function hitTaskCheckbox(rendered, clientX, clientY, pad = 2) {
+  for (const box of rendered.querySelectorAll('input.md-task')) {
+    const rect = box.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (clientX >= rect.left - pad && clientX <= rect.right + pad
+      && clientY >= rect.top - pad && clientY <= rect.bottom + pad) {
+      return box;
+    }
+  }
+  return null;
+}
+
+// 点击可视区勾选框 → 切换该任务项的 `[ ]` / `[x]`（Typora 行为）。
+// 整个操作走模型事务：DOM 只是渲染结果，勾选状态以模型为唯一真源，撤销/重做、字数、脏标记都跟着模型走。
+function onRenderedCheckboxMousedown(event) {
+  if (state.sourceMode || event.button !== 0 || !state.editorSession?.document) return;
+  const container = event.target?.closest?.('.block-rendered');
+  if (!container) return;
+  const checkbox = hitTaskCheckbox(container, event.clientX, event.clientY);
+  if (!checkbox) return;
+  const block = container.closest('.block');
+  const blockId = block?.dataset.blockId;
+  const modelBlock = blockId ? state.editorSession.document.getBlock(blockId) : null;
+  if (!modelBlock) return;
+  const offset = taskMarkerOffset(container, modelBlock, checkbox);
+  if (offset == null) return;
+  // 阻止 contenteditable 抢焦点/放光标：命中后这个块马上会被重渲染替换，原生选区留在旧节点上没有意义。
+  event.preventDefault();
+  setModelSelection(createSelection(
+    createPosition(blockId, offset),
+    createPosition(blockId, offset),
+  ));
+  executeEditorCommand('toggleTaskChecked', {}, { capture: false });
+}
+
+// 剪贴板 HTML 里出现这些块级标签，说明浏览器会往可视区插一段自带标签的 DOM（而不是纯文本）。
+const BLOCK_LEVEL_CLIPBOARD_HTML = /<(?:table|thead|tbody|tfoot|tr|th|td|ul|ol|li|h[1-6]|blockquote|pre|hr|div|section|article)\b/i;
+
+function onRenderedBlockPaste(event) {
+  const block = event.target?.closest?.('.block');
+  const rendered = block?.querySelector('.block-rendered');
+  const text = event.clipboardData?.getData('text/plain') ?? '';
+  const html = event.clipboardData?.getData('text/html') ?? '';
+
+  // 剪贴板里没有值得保留的标记时以纯文本为准（见 ui/paste.js 里对空行放大的说明）。
+  const blockId = block?.dataset.blockId;
+  const modelBlock = blockId ? state.editorSession?.document?.getBlock(blockId) : null;
+  const offsets = rendered ? renderedSelectionOffsets(rendered) : null;
+  const plan = modelBlock
+    ? planPaste({
+      clipboardText: text,
+      clipboardHtml: html,
+      renderedHtml: rendered?.innerHTML || '',
+      blockType: modelBlock.type,
+      offsets,
+      raw: modelBlock.raw,
+    })
+    : null;
+  if (plan) {
+    event.preventDefault();
+    applyModelBlockUpdate(blockId, plan.nextRaw, plan.caret, {
+      source: 'paste',
+      coalesceKey: null,
+      selection: createSelection(
+        createPosition(blockId, offsets.start),
+        createPosition(blockId, offsets.end),
+      ),
+    });
+    return;
+  }
+
+  // 富文本粘贴是浏览器自己往可视区插 DOM：插进来的表格/列表带的是剪贴板那一套标签，没有渲染层的
+  // class（`.md-table` 等），可视区就会停在「外来 HTML」上（无样式表格），直到源码模式往返才恢复。
+  // 这类粘贴结束后按模型重渲染一次；纯文本粘贴走上面的模型写入分支，不走这里。
+  const forceRerender = BLOCK_LEVEL_CLIPBOARD_HTML.test(html);
+  requestAnimationFrame(async () => {
+    const pasted = block || document.activeElement?.closest?.('.block');
+    if (!pasted) return;
+    const pastedId = pasted.dataset.blockId;
+    await syncRenderedBlock(pasted);
+    if (forceRerender && pastedId) syncIncrementalBlocks([pastedId]);
   });
 }
 
@@ -680,6 +816,7 @@ async function splitRenderedBlock(block) {
     const currentIndex = visibleBlocks.indexOf(block);
     const nextBlockElement = visibleBlocks[currentIndex + 1];
     if (nextBlockElement) {
+      // 空块后还有内容：把焦点交给下一个块（列表/引用里「回车跳出」的既有手感）。
       block.classList.remove('active');
       const currentRendered = block.querySelector('.block-rendered');
       if (currentRendered) currentRendered.contentEditable = 'false';
@@ -689,36 +826,41 @@ async function splitRenderedBlock(block) {
         nextRendered.contentEditable = 'true';
         nextRendered.focus();
       }
+      return;
     }
-    return;
+    // 末尾的空块不能什么都不做（用户看到的现象就是「回车没反应」）：继续往下走，
+    // 按 cursor=0 切分，等于在下面再起一行。
   }
   const textOffset = getEditableTextOffset(rendered, range.endContainer, range.endOffset);
-  const textLength = (rendered.textContent || '').replace(/\u200B/g, '').length;
-  const prefix = modelBlock.type === 'heading'
-    ? (raw.match(/^#{1,6}\s+/) || [''])[0].length
-    : modelBlock.type === 'blockquote'
-      ? (raw.match(/^>\s+/) || [''])[0].length
-      : modelBlock.type === 'list'
-        ? (raw.match(/^(?:[-*+]|\d+\.)\s+/) || [''])[0].length
-        : 0;
-  const cursor = textOffset >= textLength
-    ? raw.length
-    : Math.min(raw.length, textOffset + prefix);
+  // 必须和 getEditableTextOffset 用同一把尺子：textContent 会把 `<ul>\n<li>` 之间的排版空白也算进去。
+  const textLength = getRenderedTextLength(rendered);
+  const prefix = blockMarkdownPrefix(modelBlock);
+  // 偏移来自 DOM，模型可能与之脱节；必须夹紧到 raw 长度，否则 splitBlock 会抛 RangeError
+  const cursor = Math.max(0, Math.min(
+    raw.length,
+    textOffset >= textLength ? raw.length : textOffset + prefix,
+  ));
   const documentIndex = state.editorSession.document.getBlockIndex(blockId);
-  const transaction = state.editorSession
-    .createTransaction({ source: 'keyboard' })
-    .split(blockId, cursor);
-  transaction.insert(documentIndex + 1, createMarkdownSeparatorBlock());
-  const result = state.editorSession.apply(transaction);
+  let result;
+  try {
+    const transaction = state.editorSession
+      .createTransaction({ source: 'keyboard' })
+      .split(blockId, cursor);
+    transaction.insert(documentIndex + 1, createMarkdownSeparatorBlock());
+    result = state.editorSession.apply(transaction);
+  } catch (error) {
+    console.error('[editor] split block failed', error);
+    return;
+  }
   state.currentContent = serializeDocument(result.document);
   const rightBlock = result.document.blocks
     .slice(documentIndex + 1)
     .find(candidate => !candidate.attrs?.separator);
   if (rightBlock) {
-    state.selection = createSelection(
+    setModelSelection(createSelection(
       createPosition(rightBlock.id, 0),
       createPosition(rightBlock.id, 0),
-    );
+    ));
     state.selectionIndex = documentIndex + 1;
     activeBlockIndex = documentIndex + 1;
   }
@@ -775,11 +917,10 @@ function applySourcePeek(blockId, raw) {
     session.createTransaction({ source: 'source-peek' }).replace(blockId, raw),
   );
   state.currentContent = serializeDocument(result.document);
-  state.selection = createSelection(
+  setModelSelection(createSelection(
     createPosition(blockId, raw.length),
     createPosition(blockId, raw.length),
-  );
-  session.selection = state.selection;
+  ));
   state.selectionIndex = result.document.blocks
     .filter(block => !block.attrs?.separator)
     .findIndex(block => block.id === blockId);
@@ -789,6 +930,62 @@ function applySourcePeek(blockId, raw) {
   updateWordCount();
   restoreBlockSelection();
   scheduleAutoSave();
+}
+
+// 编辑器快捷键表（可视区块与源码块共用一张表）。
+// 可视区原来只认 Cmd+B / Cmd+I / Cmd+Shift+S，Cmd+E、Cmd+Shift+H、Cmd+K、Cmd+Shift+U …
+// 都落回浏览器默认行为，用户看到的就是「按了没反应」。这里把两个模式收敛到同一张表，
+// 键名与设置面板里的 SHORTCUT_DEFINITIONS 一一对应（用户可以改键）。
+const INLINE_FORMAT_SHORTCUTS = [
+  { setting: 'bold', fallback: 'Cmd+B', command: 'toggleStrong' },
+  { setting: 'italic', fallback: 'Cmd+I', command: 'toggleEmphasis' },
+  { setting: 'strike', fallback: 'Cmd+Shift+S', command: 'toggleStrike' },
+  { setting: 'inlineCode', fallback: 'Cmd+E', command: 'toggleInlineCode' },
+  { setting: 'highlight', fallback: 'Cmd+Shift+H', command: 'toggleHighlight' },
+  { setting: 'link', fallback: 'Cmd+K', command: 'insertLink' },
+];
+
+// 光标（没有选中内容）时的加粗/斜体/删除线沿用浏览器的「待输入格式」：接着敲的字直接带上标记。
+// 光标状态走模型命令只会插入占位文本，而「下一次输入加粗」这种挂起状态没法用模型表达。
+const RENDERED_PENDING_FORMAT = {
+  toggleStrong: 'bold',
+  toggleEmphasis: 'italic',
+  toggleStrike: 'strikeThrough',
+};
+
+const BLOCK_COMMAND_SHORTCUTS = [
+  { setting: 'codeBlock', fallback: 'Cmd+Shift+C', command: 'toggleCodeBlock' },
+  { setting: 'quote', fallback: 'Cmd+Shift+Q', command: 'toggleQuote' },
+  { setting: 'unorderedList', fallback: 'Cmd+Shift+U', command: 'toggleUnorderedList' },
+  { setting: 'orderedList', fallback: 'Cmd+Shift+O', command: 'toggleOrderedList' },
+  { setting: 'taskList', fallback: 'Cmd+Shift+T', command: 'toggleTaskList' },
+  { setting: 'insertMdx', fallback: 'Cmd+Shift+M', command: 'insertMdx' },
+  { setting: 'insertTable', fallback: 'Option+Cmd+T', command: 'insertTable' },
+];
+
+function matchInlineFormatShortcut(event) {
+  return INLINE_FORMAT_SHORTCUTS.find(item =>
+    matchesShortcut(event, getSetting(`shortcuts.${item.setting}`, item.fallback))) || null;
+}
+
+function matchBlockCommandShortcut(event) {
+  const hit = BLOCK_COMMAND_SHORTCUTS.find(item =>
+    matchesShortcut(event, getSetting(`shortcuts.${item.setting}`, item.fallback)));
+  if (hit) return { command: hit.command, args: {} };
+  for (let level = 1; level <= 6; level += 1) {
+    if (matchesShortcut(event, getSetting(`shortcuts.h${level}`, `Option+Cmd+${level}`))) {
+      return { command: 'setHeading', args: { level } };
+    }
+  }
+  if (matchesShortcut(event, getSetting('shortcuts.paragraph', 'Option+Cmd+0'))) {
+    return { command: 'setHeading', args: { level: 0 } };
+  }
+  const isCommand = event.metaKey || event.ctrlKey;
+  const key = event.key.toLowerCase();
+  if (isCommand && event.shiftKey && key === 'd') return { command: 'duplicateBlock', args: {} };
+  if (event.altKey && event.key === 'ArrowUp') return { command: 'moveBlockUp', args: {} };
+  if (event.altKey && event.key === 'ArrowDown') return { command: 'moveBlockDown', args: {} };
+  return null;
 }
 
 function onRenderedBlockKeydown(event) {
@@ -804,28 +1001,52 @@ function onRenderedBlockKeydown(event) {
     toggleSourceMode();
     return;
   }
+  if (matchesShortcut(event, getSetting('shortcuts.undo', 'Cmd+Z'))) {
+    event.preventDefault();
+    undoEditor();
+    return;
+  }
+  if (matchesShortcut(event, getSetting('shortcuts.redo', 'Cmd+Shift+Z'))
+    || (isCommand && key === 'y' && !event.altKey)) {
+    event.preventDefault();
+    redoEditor();
+    return;
+  }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     void splitRenderedBlock(event.target.closest('.block'));
     return;
   }
-  if (isCommand && key === 'b') {
+  // 行内格式与块级命令：走模型命令注册表，和源码块/命令面板同一套语义，
+  // 不再用 execCommand 直接改 DOM（标题里 execCommand('bold') 会把字变回常规体，选中文字也拿不到标记）。
+  const inlineFormat = matchInlineFormatShortcut(event);
+  if (inlineFormat) {
     event.preventDefault();
-    document.execCommand('bold');
-    void syncRenderedBlock(event.target.closest('.block'));
+    const pendingCommand = RENDERED_PENDING_FORMAT[inlineFormat.command];
+    if (pendingCommand && window.getSelection()?.isCollapsed) {
+      document.execCommand(pendingCommand);
+      void syncRenderedBlock(event.target.closest('.block'));
+      return;
+    }
+    executeRenderedEditorCommand(inlineFormat.command);
     return;
   }
-  if (isCommand && key === 'i') {
+  const blockCommand = matchBlockCommandShortcut(event);
+  if (blockCommand) {
     event.preventDefault();
-    document.execCommand('italic');
-    void syncRenderedBlock(event.target.closest('.block'));
+    executeRenderedEditorCommand(blockCommand.command, blockCommand.args);
     return;
   }
-  if (isCommand && event.shiftKey && key === 's') {
-    event.preventDefault();
-    document.execCommand('strikeThrough');
-    void syncRenderedBlock(event.target.closest('.block'));
-    return;
+  if (event.key === 'Tab') {
+    const tabBlock = event.target.closest('.block');
+    const tabModelBlock = tabBlock && state.editorSession?.document.getBlock(tabBlock.dataset.blockId);
+    if (tabModelBlock?.type === 'list') {
+      event.preventDefault();
+      executeRenderedEditorCommand(event.shiftKey ? 'outdentList' : 'indentList', {
+        size: Number(getSetting('editor.indentSize', 2)) || 2,
+      });
+      return;
+    }
   }
   if (event.key === 'Backspace') {
     const rendered = event.target;
@@ -840,15 +1061,50 @@ function onRenderedBlockKeydown(event) {
           .remove(block.dataset.blockId);
         const result = state.editorSession.apply(transaction);
         state.currentContent = serializeDocument(result.document);
-        activeBlockIndex = index - 1;
+        // 光标回到上一个块的末尾；被删掉的正是刚才的活动块，可编辑焦点也要一并交还。
+        const previousBlock = result.document.blocks
+          .filter(item => !item.attrs?.separator)[index - 1];
+        if (previousBlock) {
+          setModelSelection(createSelection(
+            createPosition(previousBlock.id, previousBlock.raw.length),
+            createPosition(previousBlock.id, previousBlock.raw.length),
+          ));
+        }
         syncIncrementalBlocks(result.changedBlockIds);
-        requestAnimationFrame(() => {
-          const previous = qs(`#block-editor .block[data-block-index="${index - 1}"] .block-rendered`);
-          previous?.focus();
-        });
+        focusBlockForSelection();
+        updateWordCount();
+        scheduleAutoSave();
       }
     }
   }
+}
+
+// 可视区里不显示的 Markdown 前缀（#、>、- 等）：DOM 文本偏移 + 前缀长度 = 模型 raw 偏移。
+function blockMarkdownPrefix(modelBlock) {
+  if (!modelBlock) return 0;
+  const raw = modelBlock.raw || '';
+  switch (modelBlock.type) {
+    case 'heading':
+      return (raw.match(/^#{1,6}\s+/) || [''])[0].length;
+    case 'quote':
+      return (raw.match(/^>\s+/) || [''])[0].length;
+    case 'list': {
+      // 任务列表（`- [ ] abc`）渲染后 DOM 文本是 " abc"（勾选框自身不产生文本），
+      // 前缀要算上 `[ ]` 这一段，否则光标偏移会落到标记里。
+      const task = raw.match(/^(?:[-*+]|\d+[.)])\s+\[[ xX]\]/);
+      if (task) return task[0].length;
+      return (raw.match(/^(?:[-*+]|\d+\.)\s+/) || [''])[0].length;
+    }
+    default:
+      return 0;
+  }
+}
+
+// 模型改动后统一登记光标：state.selection 供 UI 恢复，session.setSelection 让撤销/重做回到同一位置。
+function setModelSelection(selection) {
+  state.selection = selection;
+  if (state.editorSession) state.editorSession.setSelection(selection);
+  return selection;
 }
 
 function applyModelBlockUpdate(blockId, raw, caretOffset, {
@@ -869,11 +1125,10 @@ function applyModelBlockUpdate(blockId, raw, caretOffset, {
   const inlinePosition = updatedBlock?.children?.length
     ? textOffsetToInlinePosition(updatedBlock.children, caretOffset)
     : { path: [], offset: caretOffset };
-  state.selection = createSelection(
+  setModelSelection(createSelection(
     createPosition(blockId, inlinePosition.offset, inlinePosition.path),
     createPosition(blockId, inlinePosition.offset, inlinePosition.path),
-  );
-  state.editorSession.selection = state.selection;
+  ));
   const visibleBlocks = result.document.blocks.filter(item => !item.attrs?.separator);
   state.selectionIndex = visibleBlocks.findIndex(item => item.id === blockId);
   syncIncrementalBlocks(result.changedBlockIds);
@@ -963,10 +1218,10 @@ function onBlockBeforeInput(e) {
     const documentIndex = result.document.getBlockIndex(blockId);
     const right = result.document.blocks[documentIndex + 1];
     if (right) {
-      state.selection = createSelection(
+      setModelSelection(createSelection(
         createPosition(right.id, 0),
         createPosition(right.id, 0),
-      );
+      ));
     }
     syncIncrementalBlocks(result.changedBlockIds);
     updateWordCount();
@@ -1009,10 +1264,10 @@ function onBlockBeforeInput(e) {
       transaction.remove(blockId);
       const result = state.editorSession.apply(transaction);
       state.currentContent = serializeDocument(result.document);
-      state.selection = createSelection(
+      setModelSelection(createSelection(
         createPosition(previous.id, previous.raw.length),
         createPosition(previous.id, previous.raw.length),
-      );
+      ));
       syncIncrementalBlocks(result.changedBlockIds);
       updateWordCount();
       scheduleAutoSave();
@@ -1236,97 +1491,16 @@ function onBlockKeydown(e) {
     return;
   }
 
-  if (matchesShortcut(e, getSetting('shortcuts.bold', 'Cmd+B'))) {
+  const inlineFormat = matchInlineFormatShortcut(e);
+  if (inlineFormat) {
     e.preventDefault();
-    executeEditorCommand('toggleStrong');
+    executeEditorCommand(inlineFormat.command);
     return;
   }
-  if (matchesShortcut(e, getSetting('shortcuts.italic', 'Cmd+I'))) {
+  const blockCommand = matchBlockCommandShortcut(e);
+  if (blockCommand) {
     e.preventDefault();
-    executeEditorCommand('toggleEmphasis');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.strike', 'Cmd+Shift+S'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleStrike');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.inlineCode', 'Cmd+E'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleInlineCode');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.highlight', 'Cmd+Shift+H'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleHighlight');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.link', 'Cmd+K'))) {
-    e.preventDefault();
-    executeEditorCommand('insertLink');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.codeBlock', 'Cmd+Shift+C'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleCodeBlock');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.quote', 'Cmd+Shift+Q'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleQuote');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.unorderedList', 'Cmd+Shift+U'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleUnorderedList');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.orderedList', 'Cmd+Shift+O'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleOrderedList');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.taskList', 'Cmd+Shift+T'))) {
-    e.preventDefault();
-    executeEditorCommand('toggleTaskList');
-    return;
-  }
-
-  for (let level = 1; level <= 6; level += 1) {
-    if (matchesShortcut(e, getSetting(`shortcuts.h${level}`, `Option+Cmd+${level}`))) {
-      e.preventDefault();
-      executeEditorCommand('setHeading', { level });
-      return;
-    }
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.paragraph', 'Option+Cmd+0'))) {
-    e.preventDefault();
-    executeEditorCommand('setHeading', { level: 0 });
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.insertMdx', 'Cmd+Shift+M'))) {
-    e.preventDefault();
-    executeEditorCommand('insertMdx');
-    return;
-  }
-  if (matchesShortcut(e, getSetting('shortcuts.insertTable', 'Option+Cmd+T'))) {
-    e.preventDefault();
-    executeEditorCommand('insertTable');
-    return;
-  }
-  if (isCmd && e.shiftKey && key === 'd') {
-    e.preventDefault();
-    executeEditorCommand('duplicateBlock');
-    return;
-  }
-  if (e.altKey && e.key === 'ArrowUp') {
-    e.preventDefault();
-    executeEditorCommand('moveBlockUp');
-    return;
-  }
-  if (e.altKey && e.key === 'ArrowDown') {
-    e.preventDefault();
-    executeEditorCommand('moveBlockDown');
+    executeEditorCommand(blockCommand.command, blockCommand.args);
     return;
   }
   if (e.key === 'Tab' && state.editorSession?.document) {
@@ -1370,10 +1544,10 @@ function onBlockKeydown(e) {
       const documentIndex = result.document.getBlockIndex(blockId);
       const rightBlock = result.document.blocks[documentIndex + 1];
       if (rightBlock) {
-        state.selection = createSelection(
+        setModelSelection(createSelection(
           createPosition(rightBlock.id, 0),
           createPosition(rightBlock.id, 0),
-        );
+        ));
         const visibleIndex = result.document.blocks
           .filter(item => !item.attrs?.separator)
           .findIndex(item => item.id === rightBlock.id);
@@ -1443,10 +1617,10 @@ function onBlockKeydown(e) {
           const visibleBlocks = result.document.blocks.filter(item => !item.attrs?.separator);
           const previous = visibleBlocks[Math.max(0, idx - 1)];
           if (previous) {
-            state.selection = createSelection(
+            setModelSelection(createSelection(
               createPosition(previous.id, previous.raw.length),
               createPosition(previous.id, previous.raw.length),
-            );
+            ));
             state.selectionIndex = Math.max(0, idx - 1);
             activeBlockIndex = state.selectionIndex;
           }
@@ -2552,6 +2726,12 @@ function setContentEditableSelection(root, start, end) {
   let endOffset = 0;
 
   while (node) {
+    // 排版空白节点不参与计数，否则模型偏移会被映射到 `<ul>` 与 `<li>` 之间的换行上，
+    // 光标落到列表结构外面，接着敲的字符就插到了行首。
+    if (isLayoutWhitespaceNode(node)) {
+      node = walker.nextNode();
+      continue;
+    }
     const length = node.textContent?.length || 0;
     if (!startNode && start <= offset + length) {
       startNode = node;
@@ -2607,11 +2787,10 @@ function replaceCurrentFindMatch() {
   const transaction = session.createTransaction({ source: 'find-replace' }).replace(block.id, nextRaw);
   const result = session.apply(transaction);
   const caret = match.start + replacement.length;
-  session.selection = createSelection(
+  setModelSelection(createSelection(
     createPosition(block.id, caret),
     createPosition(block.id, caret),
-  );
-  state.selection = session.selection;
+  ));
   state.currentContent = serializeDocument(result.document);
   state.isDirty = true;
   syncIncrementalBlocks(result.changedBlockIds);
@@ -2969,44 +3148,6 @@ function toggleSourceMode() {
   refreshFindReplaceMatches();
 }
 
-function handleEditorKeydown(e) {
-  if (matchesShortcut(e, getSetting('shortcuts.sourcePeek', 'F5'))) {
-    e.preventDefault();
-    openSourcePeek();
-    return;
-  }
-  const isCmd = e.metaKey || e.ctrlKey;
-
-  if (isCmd && e.key === 's') {
-    e.preventDefault();
-    saveCurrentDoc();
-    return;
-  }
-
-  if (isCmd && e.key === 'b') {
-    e.preventDefault();
-    document.execCommand('bold');
-    return;
-  }
-
-  if (isCmd && e.key === 'i') {
-    e.preventDefault();
-    document.execCommand('italic');
-    return;
-  }
-
-  if (isCmd && e.key === '/') {
-    e.preventDefault();
-    toggleSourceMode();
-    return;
-  }
-
-  // Enter in empty list item — insert <br>
-  if (e.key === 'Enter') {
-    setTimeout(updateWordCount, 0);
-  }
-}
-
 function updateWordCount() {
   let md;
   if (state.sourceMode) {
@@ -3036,11 +3177,6 @@ function syncIncrementalBlocks(changedBlockIds) {
   const root = qs('#block-editor');
   if (!root) return;
   const visibleBlocks = session.document.blocks.filter(block => !block.attrs?.separator);
-  const template = document.createElement('div');
-  template.innerHTML = buildBlockEditorHtml(serializeDocument(session.document));
-  const templates = new Map(
-    [...template.querySelectorAll('.block')].map(element => [element.dataset.blockId, element]),
-  );
   const changed = new Set(changedBlockIds);
   const expectedIds = new Set();
   let cursor = root.firstChild;
@@ -3049,8 +3185,7 @@ function syncIncrementalBlocks(changedBlockIds) {
     expectedIds.add(block.id);
     let element = root.querySelector(`[data-block-id="${block.id}"]`);
     if (!element) {
-      element = templates.get(block.id)?.cloneNode(true);
-      if (!element) continue;
+      element = createBlockElement(block);
       root.insertBefore(element, cursor);
       changed.add(block.id);
     } else if (element !== cursor) {
@@ -3070,6 +3205,10 @@ function syncIncrementalBlocks(changedBlockIds) {
   for (const element of [...root.querySelectorAll('.block')]) {
     if (!expectedIds.has(element.dataset.blockId)) element.remove();
   }
+  // DOM 顺序可能变过（插入/重排/删除）：重新编号，否则点击/激活会按旧索引找错块。
+  root.querySelectorAll('.block').forEach((element, index) => {
+    element.dataset.blockIndex = String(index);
+  });
   hookBlockEvents();
   restoreBlockSelection();
   if (currentSidebarView === 'outline') generateOutline();
@@ -3085,6 +3224,9 @@ function applyHistoryResult(result, action = 'history') {
       .findIndex(block => block.id === result.selection.anchor.blockId)
     : null;
   syncIncrementalBlocks(result.changedBlockIds);
+  // 撤销/重做可能把结构改回去（例如把两块合并成一块）：原来的 .block.active 已经不在了，
+  // 不交还可编辑焦点的话整屏都不可编辑（打字/回车都没反应）。
+  focusBlockForSelection(result.selection);
   const editor = qs('#block-editor');
   if (editor) {
     editor.dataset.editorRevision = String(result.document.version);
@@ -3103,9 +3245,29 @@ function redoEditor() {
   applyHistoryResult(state.editorSession?.redo(), 'redo');
 }
 
-function executeEditorCommand(name, args = {}) {
+// 在可视区执行编辑器命令：把 DOM 选区换算成模型 raw 偏移（补上 #、>、- 等前缀）再交给命令注册表。
+// 可视区文本不含这些前缀，直接用 DOM 偏移会让命令在标题/引用/列表块里插错位置。
+function executeRenderedEditorCommand(name, args = {}) {
+  const session = state.editorSession;
+  const block = document.activeElement?.closest?.('.block') || qs('#block-editor .block.active');
+  const rendered = block?.querySelector('.block-rendered');
+  const blockId = block?.dataset.blockId;
+  const modelBlock = blockId ? session?.document.getBlock(blockId) : null;
+  if (!session || !rendered || !modelBlock) return null;
+  const prefix = blockMarkdownPrefix(modelBlock);
+  const offsets = renderedSelectionOffsets(rendered) || { start: 0, end: 0 };
+  const toRaw = value => Math.max(0, Math.min(modelBlock.raw.length, value + prefix));
+  session.selection = createSelection(
+    createPosition(blockId, toRaw(offsets.start)),
+    createPosition(blockId, toRaw(offsets.end)),
+  );
+  return executeEditorCommand(name, args, { capture: false });
+}
+
+function executeEditorCommand(name, args = {}, { capture = true } = {}) {
   if (!state.editorSession) return null;
-  captureBlockSelection();
+  // 可视区已经自己把 DOM 选区换算成模型偏移时，不要再让 captureBlockSelection 覆盖它。
+  if (capture) captureBlockSelection();
   const result = editorCommands.execute(name, {
     session: state.editorSession,
     ...args,
@@ -3136,15 +3298,20 @@ function captureBlockSelection() {
     const block = editable.closest('.block');
     const blockId = block?.dataset.blockId;
     if (blockId) {
-      const offset = getEditableTextOffset(editable, domSelection.anchorNode, domSelection.anchorOffset);
+      // DOM 文本里没有 Markdown 前缀（#、>、- ），模型偏移要补回去；同时保留整个选区而不只是光标，
+      // 否则「选中一段文字再按 Cmd+B」只会作用在光标处。
+      const prefix = blockMarkdownPrefix(state.editorSession?.document?.getBlock(blockId));
+      const clamp = value => Math.max(0, value + prefix);
+      const start = clamp(getEditableTextOffset(editable, domSelection.anchorNode, domSelection.anchorOffset));
+      const end = clamp(getEditableTextOffset(editable, domSelection.focusNode, domSelection.focusOffset));
       state.selection = createSelection(
-        createPosition(blockId, offset),
-        createPosition(blockId, offset),
+        createPosition(blockId, Math.min(start, end)),
+        createPosition(blockId, Math.max(start, end)),
       );
       if (state.editorSession) state.editorSession.selection = state.selection;
       state.selectionIndex = Number(block.dataset.blockIndex);
       root.dataset.selectionBlock = blockId;
-      root.dataset.selectionOffset = String(offset);
+      root.dataset.selectionOffset = String(start);
       return;
     }
   }
@@ -3168,6 +3335,35 @@ function captureBlockSelection() {
   }
 }
 
+// 把选区所在的块提升为「唯一可编辑块」。
+// 撤销/重做、合并块之后，原来的 .block.active 元素可能已经被移除，结果是整屏没有任何可编辑块：
+// 打字、回车都没有反应，必须先点一下块才能继续。这里按选区把可编辑态交还回去。
+function activateBlockForSelection(selection = state.selection) {
+  const blockId = selection?.anchor?.blockId;
+  const root = qs('#block-editor');
+  if (!root || !blockId) return false;
+  const target = root.querySelector(`.block[data-block-id="${blockId}"]`);
+  if (!target) return false;
+  for (const element of root.querySelectorAll('.block')) {
+    const isTarget = element === target;
+    if (!isTarget && element.classList.contains('active')) element.classList.remove('active');
+    const rendered = element.querySelector('.block-rendered');
+    if (rendered && !isTarget && rendered.contentEditable === 'true') rendered.contentEditable = 'false';
+  }
+  target.classList.add('active');
+  const rendered = target.querySelector('.block-rendered');
+  if (rendered) rendered.contentEditable = 'true';
+  activeBlockIndex = Number(target.dataset.blockIndex);
+  state.selectionIndex = activeBlockIndex;
+  return true;
+}
+
+// 结构变化后的统一收尾：先恢复可编辑块，再让 restoreBlockSelection 把光标放进去。
+function focusBlockForSelection(selection = state.selection) {
+  if (!activateBlockForSelection(selection)) return;
+  restoreBlockSelection();
+}
+
 function restoreBlockSelection() {
   if (state.sourceMode || !state.selection) return;
   const root = qs('#block-editor');
@@ -3176,7 +3372,10 @@ function restoreBlockSelection() {
     const activeRendered = root.querySelector('.block.active .block-rendered[contenteditable="true"]');
     if (activeRendered && state.selection?.anchor?.blockId === activeRendered.closest('.block')?.dataset.blockId) {
       activeRendered.focus();
-      setContentEditableSelection(activeRendered, state.selection.anchor.offset, state.selection.head.offset);
+      // state.selection 存的是模型 raw 偏移，可视区要去掉 Markdown 前缀才是 DOM 偏移。
+      const prefix = blockMarkdownPrefix(state.editorSession?.document?.getBlock(state.selection.anchor.blockId));
+      const toDom = value => Math.max(0, value - prefix);
+      setContentEditableSelection(activeRendered, toDom(state.selection.anchor.offset), toDom(state.selection.head.offset));
       root.dataset.selectionRestored = 'true';
       return;
     }

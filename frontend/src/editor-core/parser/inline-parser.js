@@ -41,8 +41,9 @@ const rules = [
     }),
   },
   {
+    // 高亮统一用 ==x==（与 markdown/renderer.js 的 highlight 扩展、ui/wysiwyg.js 的 turndown 规则一致）
     type: INLINE_TYPES.MARK,
-    pattern: /::([^:\n]+)::/,
+    pattern: /==([^=\n]+)==/,
     create: match => createInlineNode(INLINE_TYPES.MARK, {
       children: parseInline(match[1]),
     }),

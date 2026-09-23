@@ -99,6 +99,20 @@ export class EditorSession {
     };
   }
 
+  /**
+   * 登记「当前光标」。
+   *
+   * 除了更新 session.selection，还会把它写回最近一条历史记录：撤销/重做后光标要回到用户
+   * 当时所在的位置。只靠 mapSelectionThroughTransaction 是在平移旧光标，它并不知道本次
+   * 输入把光标推到了哪里（重做后立刻输入会插在错的位置）。
+   */
+  setSelection(selection) {
+    this.selection = selection ?? null;
+    const entry = this.undoStack[this.undoStack.length - 1];
+    if (entry && this.selection) entry.afterSelection = this.selection;
+    return this.selection;
+  }
+
   undo() {
     const entry = this.undoStack.pop();
     if (!entry) return null;
