@@ -39,6 +39,7 @@ import { brandHeroHtml } from './ui/brand';
 import { autoResizeTextarea, debounce, escapeHtml, qs } from './ui/dom';
 import { findTextMatches, replaceAllText, replaceTextRange } from './ui/editor/find-replace';
 import { renderIcons as lucideIcons } from './ui/icons';
+import { canPeekBlock, createSourcePeek } from './ui/source-peek.js';
 import { createSplitter } from './ui/splitter';
 import {
   buildOutlineTree,
@@ -266,6 +267,17 @@ const compositionController = createCompositionController({
 
 const editorCommands = createBuiltinCommands();
 const parserWorker = createParserWorkerClient();
+const sourcePeek = createSourcePeek({
+  onApply: applySourcePeek,
+  onOpenChange: open => document.body.classList.toggle('source-peek-open', open),
+  labels: {
+    title: t('sourcePeek.title'),
+    cancel: t('sourcePeek.cancel'),
+    apply: t('sourcePeek.apply'),
+    editorLabel: t('sourcePeek.editorLabel'),
+    hint: t('sourcePeek.hint'),
+  },
+});
 async function scheduleEditorShadowComparison(markdown) {
   if (!import.meta.env.DEV) return;
   try {
@@ -698,7 +710,46 @@ async function splitRenderedBlock(block) {
   });
 }
 
+function openSourcePeek() {
+  if (state.sourceMode || sourcePeek.isOpen() || !state.editorSession) return;
+  captureBlockSelection();
+  const activeBlock = qs('#block-editor .block.active');
+  const blockId = activeBlock?.dataset.blockId || state.selection?.anchor?.blockId;
+  const block = blockId ? state.editorSession.document.getBlock(blockId) : null;
+  if (!block || !canPeekBlock(block.type)) return;
+  sourcePeek.open(blockId, { raw: block.raw, type: block.type });
+}
+
+function applySourcePeek(blockId, raw) {
+  const session = state.editorSession;
+  const before = session?.document.getBlock(blockId);
+  if (!session || !before || before.raw === raw) return;
+  const result = session.apply(
+    session.createTransaction({ source: 'source-peek' }).replace(blockId, raw),
+  );
+  state.currentContent = serializeDocument(result.document);
+  state.selection = createSelection(
+    createPosition(blockId, raw.length),
+    createPosition(blockId, raw.length),
+  );
+  session.selection = state.selection;
+  state.selectionIndex = result.document.blocks
+    .filter(block => !block.attrs?.separator)
+    .findIndex(block => block.id === blockId);
+  syncIncrementalBlocks(result.changedBlockIds);
+  state.isDirty = true;
+  updateTitleDirty();
+  updateWordCount();
+  restoreBlockSelection();
+  scheduleAutoSave();
+}
+
 function onRenderedBlockKeydown(event) {
+  if (matchesShortcut(event, getSetting('shortcuts.sourcePeek', 'F5'))) {
+    event.preventDefault();
+    openSourcePeek();
+    return;
+  }
   const isCommand = event.metaKey || event.ctrlKey;
   const key = event.key.toLowerCase();
   if (matchesShortcut(event, getSetting('shortcuts.toggleSource', 'Cmd+/'))) {
@@ -1107,6 +1158,11 @@ async function fileToBase64(file) {
 }
 
 function onBlockKeydown(e) {
+  if (matchesShortcut(e, getSetting('shortcuts.sourcePeek', 'F5'))) {
+    e.preventDefault();
+    openSourcePeek();
+    return;
+  }
   const source = e.target;
   const block = source.closest('.block');
   if (!block) return;
@@ -1656,6 +1712,7 @@ function exportDropdownHtml(id, extraClass = '') {
 
 // 根据路径在文件树中查找文档节点
 function renderEditor() {
+  sourcePeek.close();
   closeFindReplace({ restoreFocus: false });
   disposeWorkspacePanel?.();
   disposeWorkspacePanel = null;
@@ -2726,6 +2783,11 @@ function toggleSourceMode() {
 }
 
 function handleEditorKeydown(e) {
+  if (matchesShortcut(e, getSetting('shortcuts.sourcePeek', 'F5'))) {
+    e.preventDefault();
+    openSourcePeek();
+    return;
+  }
   const isCmd = e.metaKey || e.ctrlKey;
 
   if (isCmd && e.key === 's') {

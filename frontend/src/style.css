@@ -7404,3 +7404,110 @@ select:focus-visible,
     display: none;
   }
 }
+
+/* ============================================================
+   Source Peek
+   ============================================================ */
+.source-peek-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 22, 21, 0.34);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.source-peek {
+  width: min(760px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 28px 80px rgba(20, 22, 21, 0.22);
+}
+
+.source-peek-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.source-peek-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+}
+
+.source-peek-type {
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.source-peek-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.source-peek-editor {
+  width: 100%;
+  min-height: 280px;
+  flex: 1 1 auto;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  tab-size: 4;
+}
+
+.source-peek-editor:focus {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.source-peek-footer {
+  padding: 10px 18px;
+  border-top: 1px solid var(--divider);
+  color: var(--fg-secondary);
+  font-size: 11px;
+}
+
+body.source-peek-open {
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .source-peek-backdrop {
+    padding: 12px;
+  }
+
+  .source-peek {
+    max-height: calc(100vh - 24px);
+  }
+
+  .source-peek-header {
+    flex-wrap: wrap;
+  }
+
+  .source-peek-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}

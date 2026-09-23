@@ -124,3 +124,22 @@ Expected result:
 - No full-document DOM rebuild occurs.
 - Typing remains responsive.
 - Memory growth stabilizes after history compaction.
+
+
+## Source Peek
+
+- [ ] Put the caret in a paragraph, heading, quote, list, table, or divider and press `F5`.
+- [ ] Edit only the displayed block Markdown and apply with `Cmd/Ctrl+Enter`.
+- [ ] Change a table column count and verify the rendered block updates immediately.
+- [ ] Change list indentation from 2 to 4 spaces and verify the raw Markdown is preserved exactly.
+- [ ] Type Chinese with an IME and verify composition does not submit the Peek.
+- [ ] Press `Esc` after editing and verify the block is unchanged.
+- [ ] Press `F5` on a code block or raw HTML block and verify it does not open Source Peek.
+- [ ] Open Source Peek twice in succession and verify only one overlay exists.
+- [ ] Apply one Peek change and press `Cmd/Ctrl+Z`; verify one undo restores the previous block.
+
+Expected result:
+
+- Source Peek edits one block through an `EditorSession` replace transaction.
+- Applying no changes does not create an undo step or mark the document dirty.
+- The overlay uses the active theme and remains usable on narrow windows.

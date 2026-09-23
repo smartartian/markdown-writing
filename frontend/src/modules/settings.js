@@ -42,6 +42,7 @@ const SHORTCUT_DEFINITIONS = {
   h6: { label: '六级标题 (H6)', default: 'Option+Cmd+6', description: '设为六级标题' },
   paragraph: { label: '正文段落', default: 'Option+Cmd+0', description: '移除标题并恢复正文段落' },
   toggleSource: { label: '切换源码模式', default: 'Cmd+/', description: '在预览和 Markdown 源码之间切换' },
+  sourcePeek: { label: '块源码精修', default: 'F5', description: '编辑当前块的 Markdown 源码' },
   toggleSidebar: { label: '切换文件树 / 大纲', default: 'Cmd+Shift+B', description: '切换左侧文件树和大纲' },
   openSettings: { label: '打开设置', default: 'Cmd+,', description: '打开设置界面' },
   insertMdx: { label: '插入 MDX 组件', default: 'Cmd+Shift+M', description: '插入 MDX 组件模板' },
@@ -84,7 +85,7 @@ const SHORTCUT_GROUPS = [
   {
     title: '编辑器操作',
     description: '保存、源码模式和编辑历史。',
-    keys: ['save', 'toggleSource', 'undo', 'redo'],
+    keys: ['save', 'toggleSource', 'sourcePeek', 'undo', 'redo'],
   },
 ];
 
