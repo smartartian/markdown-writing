@@ -15,23 +15,11 @@ const MARKDOWN_FILE_TYPES = [{
   accept: { 'text/markdown': ['.md', '.markdown', '.txt'] },
 }];
 
-function hashContent(content) {
-  let hash = 2166136261;
-  for (let i = 0; i < content.length; i++) {
-    hash ^= content.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16);
-}
-
 function createBrowserFile(name, path, content, modTime = '') {
   return {
     name,
     path,
     content,
-    contentHash: hashContent(content),
-    revision: 1,
-    versions: [{ id: Date.now(), revision: 1, content, contentHash: hashContent(content), createdAt: new Date().toISOString() }],
     modTime: modTime || new Date().toISOString().replace('T', ' ').slice(0, 19),
     size: content.length,
   };
@@ -201,18 +189,6 @@ function readDocument(path) {
   return file ? file.content : '';
 }
 
-function readDocumentWithMeta(path) {
-  const file = browserFiles.get(path);
-  if (!file) return null;
-  return {
-    path,
-    content: file.content,
-    revision: file.revision,
-    contentHash: file.contentHash,
-    changed: false,
-  };
-}
-
 async function writeDocument(path, content) {
   if (browserFiles.has(path)) {
     const file = browserFiles.get(path);
@@ -239,45 +215,6 @@ function writeImageAsset(_documentPath, _imageDir, fileName, data) {
 
 function readImageAsset(_documentPath, _imageDir, source) {
   return Promise.resolve(source);
-}
-
-async function writeDocumentVersioned(path, content, expectedRevision, expectedHash) {
-  let file = browserFiles.get(path);
-  if (!file) {
-    file = createBrowserFile(path.split('/').pop() || 'untitled.md', path, '');
-    browserFiles.set(path, file);
-  }
-  if (expectedRevision > 0 && (file.revision !== expectedRevision || file.contentHash !== expectedHash)) {
-    throw new Error('revision conflict');
-  }
-  const nextHash = hashContent(content);
-  if (nextHash !== file.contentHash) {
-    file.revision += 1;
-    file.contentHash = nextHash;
-    file.versions.unshift({
-      id: Date.now(),
-      revision: file.revision,
-      content,
-      contentHash: nextHash,
-      createdAt: new Date().toISOString(),
-    });
-    file.versions = file.versions.slice(0, 50);
-  }
-  file.content = content;
-  file.size = content.length;
-  file.modTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  await writeBrowserFile(path, content);
-  return file.revision;
-}
-
-function listFileVersions(path) {
-  return browserFiles.get(path)?.versions || [];
-}
-
-function restoreFileVersion(path, versionID, expectedRevision, expectedHash) {
-  const version = listFileVersions(path).find(item => item.id === versionID);
-  if (!version) throw new Error('version not found');
-  return writeDocumentVersioned(path, version.content, expectedRevision, expectedHash);
 }
 
 async function createDocument(dirPath, name) {
@@ -378,6 +315,26 @@ async function openDocumentFile() {
   });
 }
 
+async function acceptBrowserDroppedDocument(file) {
+  if (!file) throw new Error('dropped file is missing');
+  const name = file.name || 'untitled.md';
+  const path = '/' + name;
+  const content = await file.text();
+  const document = createBrowserFile(
+    name,
+    path,
+    content,
+    new Date(file.lastModified || Date.now()).toISOString().replace('T', ' ').slice(0, 19),
+  );
+  browserFiles.set(path, document);
+  return {
+    name: document.name,
+    path: document.path,
+    size: document.size,
+    modTime: document.modTime,
+  };
+}
+
 async function saveDocumentAs(content) {
   let name = '未命名.md';
   let handle = null;
@@ -402,127 +359,7 @@ async function saveDocumentAs(content) {
   return { name, path, size: content.length, modTime: browserFiles.get(path).modTime };
 }
 
-const BROWSER_DB_KEY = 'md_editor_db_docs';
-const BROWSER_DB_VERSIONS_KEY = 'md_editor_db_versions';
-
-function listDbDocuments() {
-  try {
-    const raw = localStorage.getItem(BROWSER_DB_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (error) {
-    return [];
-  }
-}
-
-function saveDbDocuments(docs) {
-  localStorage.setItem(BROWSER_DB_KEY, JSON.stringify(docs));
-}
-
-function createDbDocument(name, content) {
-  const docs = listDbDocuments();
-  const id = Date.now();
-  docs.push({
-    id,
-    name,
-    content,
-    revision: 1,
-    size: content.length,
-    modTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-  });
-  saveDbDocuments(docs);
-  saveDbVersions({
-    ...readDbVersions(),
-    [id]: [{ id: Date.now(), revision: 1, name, content, createdAt: new Date().toISOString() }],
-  });
-  return id;
-}
-
-function readDbDocument(id) {
-  return listDbDocuments().find(doc => doc.id === id) || null;
-}
-
-function updateDbDocument(id, name, content, expectedRevision) {
-  const docs = listDbDocuments();
-  const index = docs.findIndex(doc => doc.id === id);
-  if (index === -1) return 0;
-  if (expectedRevision > 0 && docs[index].revision !== expectedRevision) {
-    throw new Error('revision conflict');
-  }
-  if (docs[index].content === content) return docs[index].revision;
-  docs[index].revision = (docs[index].revision || 1) + 1;
-  docs[index].name = name;
-  docs[index].content = content;
-  docs[index].size = content.length;
-  docs[index].modTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  saveDbDocuments(docs);
-  const versions = readDbVersions();
-  versions[id] = [
-    { id: Date.now(), revision: docs[index].revision, name, content, createdAt: new Date().toISOString() },
-    ...(versions[id] || []),
-  ].slice(0, 50);
-  saveDbVersions(versions);
-  return docs[index].revision;
-}
-
-function deleteDbDocument(id) {
-  const docs = listDbDocuments();
-  const doc = docs.find(item => item.id === id);
-  if (doc) {
-    doc.deletedAt = new Date().toISOString();
-    saveDbDocuments(docs);
-  }
-}
-
-function listDbDocumentSummaries() {
-  return listDbDocuments().filter(doc => !doc.deletedAt).map(doc => ({
-    id: doc.id,
-    name: doc.name,
-    size: doc.size,
-    modTime: doc.modTime,
-    revision: doc.revision || 1,
-  }));
-}
-
-function readDbVersions() {
-  try {
-    return JSON.parse(localStorage.getItem(BROWSER_DB_VERSIONS_KEY) || '{}');
-  } catch (error) {
-    return {};
-  }
-}
-
-function saveDbVersions(versions) {
-  localStorage.setItem(BROWSER_DB_VERSIONS_KEY, JSON.stringify(versions));
-}
-
-function listDbDocumentVersions(id) {
-  return (readDbVersions()[id] || []).map(version => ({
-    id: version.id,
-    documentId: id,
-    revision: version.revision,
-    name: version.name,
-    content: version.content,
-    size: version.content.length,
-    createdAt: version.createdAt,
-  }));
-}
-
-function restoreDbDocumentVersion(id, versionID, expectedRevision) {
-  const version = listDbDocumentVersions(id).find(item => item.id === versionID);
-  if (!version) throw new Error('version not found');
-  return updateDbDocument(id, version.name, version.content, expectedRevision);
-}
-
 function restoreRecycleItem(id) {
-  if (id < 0) {
-    const docs = listDbDocuments();
-    const doc = docs.find(item => item.id === -id);
-    if (doc) {
-      delete doc.deletedAt;
-      saveDbDocuments(docs);
-    }
-    return;
-  }
   const index = browserRecycle.findIndex(item => item.id === id);
   if (index === -1) return;
   const [item] = browserRecycle.splice(index, 1);
@@ -531,28 +368,12 @@ function restoreRecycleItem(id) {
 }
 
 function purgeRecycleItem(id) {
-  if (id < 0) {
-    saveDbDocuments(listDbDocuments().filter(item => item.id !== -id));
-    return;
-  }
   const index = browserRecycle.findIndex(item => item.id === id);
   if (index >= 0) browserRecycle.splice(index, 1);
 }
 
 function listRecycleBin() {
-  const deletedDocs = listDbDocuments()
-    .filter(doc => doc.deletedAt)
-    .map(doc => ({
-      id: -doc.id,
-      originalPath: `db:${doc.id}`,
-      storedPath: `db:${doc.id}`,
-      name: doc.name,
-      deletedAt: doc.deletedAt,
-    }));
-  return [
-    ...deletedDocs,
-    ...browserRecycle.map(({ content, ...item }) => item),
-  ];
+  return browserRecycle.map(({ content, ...item }) => item);
 }
 
 function listUserThemes() {
@@ -620,13 +441,9 @@ export const browserAdapter = {
   listDocuments,
   listDocumentTree,
   readDocument,
-  readDocumentWithMeta,
   readImageAsset,
   writeDocument,
   writeImageAsset,
-  writeDocumentVersioned,
-  listFileVersions,
-  restoreFileVersion,
   createDocument,
   deleteDocument,
   listRecycleBin,
@@ -636,19 +453,13 @@ export const browserAdapter = {
   revealDocument: async () => false,
   openDocumentFile,
   acceptDroppedDocument: async path => ({ name: path.split('/').pop(), path }),
+  acceptBrowserDroppedDocument,
   saveDocumentAs,
   saveExportFile: async () => null,
   addRecentFile: async () => {},
   listRecentFiles: async () => [],
   getAppState: async () => null,
   getAppVersion: async () => APP_VERSION,
-  createDbDocument,
-  readDbDocument,
-  updateDbDocument,
-  deleteDbDocument,
-  listDbDocuments: listDbDocumentSummaries,
-  listDbDocumentVersions,
-  restoreDbDocumentVersion,
   saveAppSetting: async (key, value) => saveBrowserAppSetting(key, value),
   loadAppSettings: async () => loadBrowserAppSettings(),
   getThemesDirectory: async () => 'Browser localStorage: md_editor_user_themes',
@@ -664,6 +475,8 @@ export const browserAdapter = {
   saveRecoveryState: async payload => localStorage.setItem('md_editor_recovery', payload),
   loadRecoveryState: async () => localStorage.getItem('md_editor_recovery') || '',
   clearRecoveryState: async () => localStorage.removeItem('md_editor_recovery'),
+  // 浏览器预览没有程序坞：不设置应用图标，缩进比例也交给 brand.js 的兜底值。
+  setApplicationIcon: async () => false,
   setPendingChanges: async () => {},
   confirmClose: async () => {},
 };

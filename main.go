@@ -5,37 +5,32 @@ import (
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
-	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func main() {
-	app := NewApp()
-
-	AppMenu := menu.NewMenu()
-	FileMenu := AppMenu.AddSubmenu("文件")
+func buildAppMenu(app *App) *menu.Menu {
+	appMenu := menu.NewMenu()
+	FileMenu := appMenu.AddSubmenu("文件")
 	FileMenu.AddText("保存", nil, func(_ *menu.CallbackData) {
 		app.MenuSave()
 	})
 	FileMenu.AddText("另存为...", nil, func(_ *menu.CallbackData) {
 		app.MenuSaveAs()
 	})
-	EditMenu := AppMenu.AddSubmenu("编辑")
-	EditMenu.AddText("剪切", keys.CmdOrCtrl("x"), func(_ *menu.CallbackData) {
-		runtime.EventsEmit(app.ctx, "menu:cut")
-	})
-	EditMenu.AddText("复制", keys.CmdOrCtrl("c"), func(_ *menu.CallbackData) {
-		runtime.EventsEmit(app.ctx, "menu:copy")
-	})
-	EditMenu.AddText("粘贴", keys.CmdOrCtrl("v"), func(_ *menu.CallbackData) {
-		runtime.EventsEmit(app.ctx, "menu:paste")
-	})
+	// 编辑菜单必须交给 macOS 原生角色处理：自定义菜单项会抢占 Cmd+X/C/V 且无法把剪贴板内容
+	// 送入网页视图，结果是剪切/复制/粘贴快捷键完全失效（菜单回调只是发事件，没有任何实现）。
+	appMenu.Append(menu.EditMenu())
+	return appMenu
+}
+
+func main() {
+	app := NewApp()
+	AppMenu := buildAppMenu(app)
 
 	err := wails.Run(&options.App{
 		Title:     "Markdown Writing",

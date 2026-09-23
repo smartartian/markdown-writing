@@ -12,20 +12,6 @@ export function ConfirmClose():Promise<void>;
 
 export function CreateDocument(arg1:string,arg2:string):Promise<main.Document>;
 
-export function DBCreateDocument(arg1:string,arg2:string):Promise<number>;
-
-export function DBDeleteDocument(arg1:number):Promise<void>;
-
-export function DBListDocumentVersions(arg1:number,arg2:number):Promise<Array<main.DocumentVersion>>;
-
-export function DBListDocuments():Promise<Array<main.DBDocument>>;
-
-export function DBReadDocument(arg1:number):Promise<Record<string, any>>;
-
-export function DBRestoreDocumentVersion(arg1:number,arg2:number,arg3:number):Promise<number>;
-
-export function DBUpdateDocument(arg1:number,arg2:string,arg3:string,arg4:number):Promise<number>;
-
 export function DeleteDocument(arg1:string):Promise<void>;
 
 export function DeleteUserPlugin(arg1:string):Promise<void>;
@@ -36,6 +22,8 @@ export function GetAppState():Promise<main.AppState>;
 
 export function GetAppVersion():Promise<string>;
 
+export function GetApplicationIconContentRatio():Promise<number>;
+
 export function GetThemesDirectory():Promise<string>;
 
 export function GetUserPluginsDirectory():Promise<string>;
@@ -43,8 +31,6 @@ export function GetUserPluginsDirectory():Promise<string>;
 export function ListDocumentTree(arg1:string):Promise<Array<main.Document>>;
 
 export function ListDocuments(arg1:string):Promise<Array<main.Document>>;
-
-export function ListFileVersions(arg1:string,arg2:number):Promise<Array<main.FileVersion>>;
 
 export function ListRecentFiles(arg1:number):Promise<Array<main.Document>>;
 
@@ -68,13 +54,9 @@ export function PurgeRecycleItem(arg1:number):Promise<void>;
 
 export function ReadDocument(arg1:string):Promise<string>;
 
-export function ReadDocumentWithMeta(arg1:string):Promise<main.FileDocument>;
-
 export function ReadImageAsset(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function RenameDocument(arg1:string,arg2:string):Promise<main.Document>;
-
-export function RestoreFileVersion(arg1:string,arg2:number,arg3:number,arg4:string):Promise<number>;
 
 export function RestoreRecycleItem(arg1:number):Promise<void>;
 
@@ -98,10 +80,10 @@ export function SaveUserTheme(arg1:string,arg2:string):Promise<void>;
 
 export function SelectDocumentDir():Promise<string>;
 
+export function SetApplicationIcon(arg1:string):Promise<void>;
+
 export function SetPendingChanges(arg1:number,arg2:string):Promise<void>;
 
 export function WriteDocument(arg1:string,arg2:string):Promise<void>;
-
-export function WriteDocumentVersioned(arg1:string,arg2:string,arg3:number,arg4:string):Promise<number>;
 
 export function WriteImageAsset(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;

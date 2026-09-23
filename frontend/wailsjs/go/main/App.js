@@ -22,34 +22,6 @@ export function CreateDocument(arg1, arg2) {
   return window['go']['main']['App']['CreateDocument'](arg1, arg2);
 }
 
-export function DBCreateDocument(arg1, arg2) {
-  return window['go']['main']['App']['DBCreateDocument'](arg1, arg2);
-}
-
-export function DBDeleteDocument(arg1) {
-  return window['go']['main']['App']['DBDeleteDocument'](arg1);
-}
-
-export function DBListDocumentVersions(arg1, arg2) {
-  return window['go']['main']['App']['DBListDocumentVersions'](arg1, arg2);
-}
-
-export function DBListDocuments() {
-  return window['go']['main']['App']['DBListDocuments']();
-}
-
-export function DBReadDocument(arg1) {
-  return window['go']['main']['App']['DBReadDocument'](arg1);
-}
-
-export function DBRestoreDocumentVersion(arg1, arg2, arg3) {
-  return window['go']['main']['App']['DBRestoreDocumentVersion'](arg1, arg2, arg3);
-}
-
-export function DBUpdateDocument(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['DBUpdateDocument'](arg1, arg2, arg3, arg4);
-}
-
 export function DeleteDocument(arg1) {
   return window['go']['main']['App']['DeleteDocument'](arg1);
 }
@@ -70,6 +42,10 @@ export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
+export function GetApplicationIconContentRatio() {
+  return window['go']['main']['App']['GetApplicationIconContentRatio']();
+}
+
 export function GetThemesDirectory() {
   return window['go']['main']['App']['GetThemesDirectory']();
 }
@@ -84,10 +60,6 @@ export function ListDocumentTree(arg1) {
 
 export function ListDocuments(arg1) {
   return window['go']['main']['App']['ListDocuments'](arg1);
-}
-
-export function ListFileVersions(arg1, arg2) {
-  return window['go']['main']['App']['ListFileVersions'](arg1, arg2);
 }
 
 export function ListRecentFiles(arg1) {
@@ -134,20 +106,12 @@ export function ReadDocument(arg1) {
   return window['go']['main']['App']['ReadDocument'](arg1);
 }
 
-export function ReadDocumentWithMeta(arg1) {
-  return window['go']['main']['App']['ReadDocumentWithMeta'](arg1);
-}
-
 export function ReadImageAsset(arg1, arg2, arg3) {
   return window['go']['main']['App']['ReadImageAsset'](arg1, arg2, arg3);
 }
 
 export function RenameDocument(arg1, arg2) {
   return window['go']['main']['App']['RenameDocument'](arg1, arg2);
-}
-
-export function RestoreFileVersion(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['RestoreFileVersion'](arg1, arg2, arg3, arg4);
 }
 
 export function RestoreRecycleItem(arg1) {
@@ -194,16 +158,16 @@ export function SelectDocumentDir() {
   return window['go']['main']['App']['SelectDocumentDir']();
 }
 
+export function SetApplicationIcon(arg1) {
+  return window['go']['main']['App']['SetApplicationIcon'](arg1);
+}
+
 export function SetPendingChanges(arg1, arg2) {
   return window['go']['main']['App']['SetPendingChanges'](arg1, arg2);
 }
 
 export function WriteDocument(arg1, arg2) {
   return window['go']['main']['App']['WriteDocument'](arg1, arg2);
-}
-
-export function WriteDocumentVersioned(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['WriteDocumentVersioned'](arg1, arg2, arg3, arg4);
 }
 
 export function WriteImageAsset(arg1, arg2, arg3, arg4) {

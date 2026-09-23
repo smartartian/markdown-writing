@@ -9,7 +9,7 @@ Current release: `0.0.2`. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 - Block-oriented Markdown editing with a source mode fallback
 - SQLite document library and local `.md` file workflow
 - Recent files, file tree navigation, outline navigation, and autosave
-- Revision-aware saving, version history, recycle bin, and crash recovery snapshots
+- Atomic file saving, recycle bin storage, and crash recovery snapshots
 - Markdown, text, image, PDF, and Word-compatible HTML export
 - Theme system with light/dark modes, four built-in palettes, and JSON-based user themes
 - Sanitized Markdown rendering for embedded HTML
@@ -19,7 +19,7 @@ Current release: `0.0.2`. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 - `core/state.js`: shared application state
 - `services/document-store.js`: selects the browser or Wails storage adapter
-- `services/browser-adapter.js`: browser-mode file and local database storage
+- `services/browser-adapter.js`: browser-mode file storage
 - `services/wails-adapter.js`: Wails/Go storage bindings
 - `modules/editor.js`: Markdown block parsing and rendering
 - `modules/file-tree.js`: document tree rendering and delegated navigation
@@ -85,7 +85,7 @@ Release is published.
 
 ## Manual GUI QA
 
-Native IME, close, save-failure, external-change, table, code block, drag-and-drop, and large-document checks are documented in `docs/manual-qa.md`.
+Native IME, close, save-failure, table, code block, drag-and-drop, and large-document checks are documented in `docs/manual-qa.md`.
 
 ## Data Locations
 

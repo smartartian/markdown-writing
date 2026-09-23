@@ -2,17 +2,12 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-const maxStoredVersions = 50
-
-var ErrRevisionConflict = errors.New("revision conflict")
 
 type DB struct {
 	conn *sql.DB
@@ -57,6 +52,8 @@ func (d *DB) migrate() error {
 	migrations := []migration{
 		{version: 1, apply: migrateV1},
 		{version: 2, apply: migrateV2},
+		{version: 3, apply: migrateV3},
+		{version: 4, apply: migrateV4},
 	}
 	for _, item := range migrations {
 		if item.version <= current {
@@ -98,54 +95,12 @@ func migrateV1(tx *sql.Tx) error {
 			opened_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_recent_opened ON recent_files(opened_at DESC);
-		CREATE TABLE IF NOT EXISTS documents (
-			id         INTEGER PRIMARY KEY AUTOINCREMENT,
-			name       TEXT NOT NULL,
-			content    TEXT NOT NULL DEFAULT '',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE INDEX IF NOT EXISTS idx_docs_updated ON documents(updated_at DESC);
 	`)
 	return err
 }
 
 func migrateV2(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-		ALTER TABLE documents ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
-		ALTER TABLE documents ADD COLUMN deleted_at DATETIME;
-
-		CREATE TABLE IF NOT EXISTS document_versions (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-			revision    INTEGER NOT NULL,
-			name        TEXT NOT NULL,
-			content     TEXT NOT NULL,
-			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(document_id, revision)
-		);
-		CREATE INDEX IF NOT EXISTS idx_document_versions_doc
-			ON document_versions(document_id, revision DESC);
-
-		CREATE TABLE IF NOT EXISTS file_revisions (
-			path         TEXT PRIMARY KEY,
-			revision     INTEGER NOT NULL,
-			content_hash TEXT NOT NULL,
-			updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE TABLE IF NOT EXISTS file_versions (
-			id             INTEGER PRIMARY KEY AUTOINCREMENT,
-			path           TEXT NOT NULL,
-			revision       INTEGER NOT NULL,
-			content        TEXT NOT NULL,
-			content_hash   TEXT NOT NULL,
-			created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(path, revision)
-		);
-		CREATE INDEX IF NOT EXISTS idx_file_versions_path
-			ON file_versions(path, revision DESC);
-
 		CREATE TABLE IF NOT EXISTS recycle_bin (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
 			original_path TEXT NOT NULL,
@@ -153,6 +108,25 @@ func migrateV2(tx *sql.Tx) error {
 			name          TEXT NOT NULL,
 			deleted_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+	`)
+	return err
+}
+
+// migrateV3 drops the snapshot tables that backed the retired version-history feature.
+func migrateV3(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		DROP TABLE IF EXISTS file_versions;
+		DROP TABLE IF EXISTS document_versions;
+	`)
+	return err
+}
+
+// migrateV4 drops the tables that backed the retired revision-conflict checks
+// and the retired in-database document library.
+func migrateV4(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		DROP TABLE IF EXISTS file_revisions;
+		DROP TABLE IF EXISTS documents;
 	`)
 	return err
 }
@@ -260,372 +234,6 @@ func (d *DB) ListRecentFiles(limit int) ([]Document, error) {
 		})
 	}
 	return docs, rows.Err()
-}
-
-// ---- Database Documents ----
-
-type DBDocument struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Content   string `json:"-"`
-	Size      int64  `json:"size"`
-	ModTime   string `json:"modTime"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	Revision  int64  `json:"revision"`
-}
-
-type DocumentVersion struct {
-	ID         int64  `json:"id"`
-	DocumentID int64  `json:"documentId"`
-	Revision   int64  `json:"revision"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Size       int64  `json:"size"`
-	CreatedAt  string `json:"createdAt"`
-}
-
-func (d *DB) CreateDoc(name, content string) (int64, error) {
-	tx, err := d.conn.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	result, err := tx.Exec(
-		"INSERT INTO documents(name, content, revision, created_at, updated_at) VALUES(?,?,1,datetime('now'),datetime('now'))",
-		name, content,
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(
-		"INSERT INTO document_versions(document_id, revision, name, content) VALUES(?,1,?,?)",
-		id, name, content,
-	); err != nil {
-		return 0, err
-	}
-	return id, tx.Commit()
-}
-
-func (d *DB) ReadDoc(id int64) (string, string, int64, error) {
-	var name, content string
-	var revision int64
-	err := d.conn.QueryRow(
-		"SELECT name, content, revision FROM documents WHERE id = ? AND deleted_at IS NULL",
-		id,
-	).Scan(&name, &content, &revision)
-	return name, content, revision, err
-}
-
-func (d *DB) UpdateDoc(id int64, name, content string, expectedRevision int64) (int64, error) {
-	tx, err := d.conn.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	var currentRevision int64
-	var currentContent string
-	if err := tx.QueryRow(
-		"SELECT revision, content FROM documents WHERE id = ? AND deleted_at IS NULL",
-		id,
-	).Scan(&currentRevision, &currentContent); err != nil {
-		return 0, err
-	}
-	if expectedRevision > 0 && currentRevision != expectedRevision {
-		return 0, ErrRevisionConflict
-	}
-	if currentContent == content {
-		if _, err := tx.Exec("UPDATE documents SET name = ? WHERE id = ?", name, id); err != nil {
-			return 0, err
-		}
-		return currentRevision, tx.Commit()
-	}
-
-	nextRevision := currentRevision + 1
-	if _, err := tx.Exec(
-		"UPDATE documents SET name=?, content=?, revision=?, updated_at=datetime('now') WHERE id=?",
-		name, content, nextRevision, id,
-	); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(
-		"INSERT INTO document_versions(document_id, revision, name, content) VALUES(?,?,?,?)",
-		id, nextRevision, name, content,
-	); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(`
-		DELETE FROM document_versions
-		WHERE document_id = ?
-		  AND id NOT IN (
-			SELECT id FROM document_versions
-			WHERE document_id = ?
-			ORDER BY revision DESC
-			LIMIT ?
-		  )
-	`, id, id, maxStoredVersions); err != nil {
-		return 0, err
-	}
-	return nextRevision, tx.Commit()
-}
-
-func (d *DB) DeleteDoc(id int64) error {
-	_, err := d.conn.Exec("UPDATE documents SET deleted_at=datetime('now') WHERE id = ?", id)
-	return err
-}
-
-func (d *DB) RestoreDoc(id int64) error {
-	_, err := d.conn.Exec("UPDATE documents SET deleted_at=NULL WHERE id = ?", id)
-	return err
-}
-
-func (d *DB) PurgeDoc(id int64) error {
-	_, err := d.conn.Exec("DELETE FROM documents WHERE id = ? AND deleted_at IS NOT NULL", id)
-	return err
-}
-
-func (d *DB) ListDeletedDocs(limit int) ([]DBDocument, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	rows, err := d.conn.Query(`
-		SELECT id, name, length(content), deleted_at
-		FROM documents
-		WHERE deleted_at IS NOT NULL
-		ORDER BY deleted_at DESC
-		LIMIT ?
-	`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var docs []DBDocument
-	for rows.Next() {
-		var doc DBDocument
-		if err := rows.Scan(&doc.ID, &doc.Name, &doc.Size, &doc.UpdatedAt); err != nil {
-			return nil, err
-		}
-		doc.ModTime = doc.UpdatedAt
-		docs = append(docs, doc)
-	}
-	return docs, rows.Err()
-}
-
-func (d *DB) ListDocs() ([]DBDocument, error) {
-	rows, err := d.conn.Query(
-		"SELECT id, name, length(content), updated_at, revision FROM documents WHERE deleted_at IS NULL ORDER BY updated_at DESC",
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var docs []DBDocument
-	for rows.Next() {
-		var doc DBDocument
-		if err := rows.Scan(&doc.ID, &doc.Name, &doc.Size, &doc.UpdatedAt, &doc.Revision); err != nil {
-			return nil, err
-		}
-		doc.ModTime = doc.UpdatedAt
-		docs = append(docs, doc)
-	}
-	return docs, rows.Err()
-}
-
-func (d *DB) ListDocVersions(documentID int64, limit int) ([]DocumentVersion, error) {
-	if limit <= 0 || limit > maxStoredVersions {
-		limit = maxStoredVersions
-	}
-	rows, err := d.conn.Query(`
-		SELECT id, document_id, revision, name, content, length(content), created_at
-		FROM document_versions
-		WHERE document_id = ?
-		ORDER BY revision DESC
-		LIMIT ?
-	`, documentID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var versions []DocumentVersion
-	for rows.Next() {
-		var version DocumentVersion
-		if err := rows.Scan(
-			&version.ID,
-			&version.DocumentID,
-			&version.Revision,
-			&version.Name,
-			&version.Content,
-			&version.Size,
-			&version.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		versions = append(versions, version)
-	}
-	return versions, rows.Err()
-}
-
-func (d *DB) RestoreDocVersion(documentID, versionID, expectedRevision int64) (int64, error) {
-	var name, content string
-	if err := d.conn.QueryRow(
-		"SELECT name, content FROM document_versions WHERE id = ? AND document_id = ?",
-		versionID, documentID,
-	).Scan(&name, &content); err != nil {
-		return 0, err
-	}
-	return d.UpdateDoc(documentID, name, content, expectedRevision)
-}
-
-// ---- File Revisions ----
-
-type FileRevision struct {
-	Path        string `json:"path"`
-	Revision    int64  `json:"revision"`
-	ContentHash string `json:"contentHash"`
-	UpdatedAt   string `json:"updatedAt"`
-}
-
-type FileVersion struct {
-	ID          int64  `json:"id"`
-	Path        string `json:"path"`
-	Revision    int64  `json:"revision"`
-	Content     string `json:"content"`
-	ContentHash string `json:"contentHash"`
-	Size        int64  `json:"size"`
-	CreatedAt   string `json:"createdAt"`
-}
-
-func (d *DB) EnsureFileRevision(path, contentHash, content string) (FileRevision, error) {
-	tx, err := d.conn.Begin()
-	if err != nil {
-		return FileRevision{}, err
-	}
-	defer tx.Rollback()
-
-	var revision FileRevision
-	err = tx.QueryRow(
-		"SELECT path, revision, content_hash, updated_at FROM file_revisions WHERE path = ?",
-		path,
-	).Scan(&revision.Path, &revision.Revision, &revision.ContentHash, &revision.UpdatedAt)
-	if err == nil {
-		return revision, tx.Commit()
-	}
-	if err != sql.ErrNoRows {
-		return FileRevision{}, err
-	}
-
-	revision = FileRevision{
-		Path:        path,
-		Revision:    1,
-		ContentHash: contentHash,
-	}
-	if _, err := tx.Exec(
-		"INSERT INTO file_revisions(path, revision, content_hash, updated_at) VALUES(?,?,?,datetime('now'))",
-		path, revision.Revision, contentHash,
-	); err != nil {
-		return FileRevision{}, err
-	}
-	if _, err := tx.Exec(
-		"INSERT INTO file_versions(path, revision, content, content_hash) VALUES(?,?,?,?)",
-		path, revision.Revision, content, contentHash,
-	); err != nil {
-		return FileRevision{}, err
-	}
-	if err := tx.QueryRow(
-		"SELECT updated_at FROM file_revisions WHERE path = ?", path,
-	).Scan(&revision.UpdatedAt); err != nil {
-		return FileRevision{}, err
-	}
-	return revision, tx.Commit()
-}
-
-func (d *DB) CommitFileRevision(path, contentHash, content string, expectedRevision int64, expectedHash string) (int64, error) {
-	tx, err := d.conn.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	var currentRevision int64
-	var currentHash string
-	if err := tx.QueryRow(
-		"SELECT revision, content_hash FROM file_revisions WHERE path = ?",
-		path,
-	).Scan(&currentRevision, &currentHash); err != nil {
-		return 0, err
-	}
-	if expectedRevision != currentRevision || expectedHash != currentHash {
-		return 0, ErrRevisionConflict
-	}
-	if contentHash == currentHash {
-		return currentRevision, tx.Commit()
-	}
-
-	nextRevision := currentRevision + 1
-	if _, err := tx.Exec(
-		"UPDATE file_revisions SET revision=?, content_hash=?, updated_at=datetime('now') WHERE path=?",
-		nextRevision, contentHash, path,
-	); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(
-		"INSERT INTO file_versions(path, revision, content, content_hash) VALUES(?,?,?,?)",
-		path, nextRevision, content, contentHash,
-	); err != nil {
-		return 0, err
-	}
-	if _, err := tx.Exec(`
-		DELETE FROM file_versions
-		WHERE path = ?
-		  AND id NOT IN (
-			SELECT id FROM file_versions
-			WHERE path = ?
-			ORDER BY revision DESC
-			LIMIT ?
-		  )
-	`, path, path, maxStoredVersions); err != nil {
-		return 0, err
-	}
-	return nextRevision, tx.Commit()
-}
-
-func (d *DB) ListFileVersions(path string, limit int) ([]FileVersion, error) {
-	if limit <= 0 || limit > maxStoredVersions {
-		limit = maxStoredVersions
-	}
-	rows, err := d.conn.Query(`
-		SELECT id, path, revision, content, content_hash, length(content), created_at
-		FROM file_versions
-		WHERE path = ?
-		ORDER BY revision DESC
-		LIMIT ?
-	`, path, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var versions []FileVersion
-	for rows.Next() {
-		var version FileVersion
-		if err := rows.Scan(
-			&version.ID,
-			&version.Path,
-			&version.Revision,
-			&version.Content,
-			&version.ContentHash,
-			&version.Size,
-			&version.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		versions = append(versions, version)
-	}
-	return versions, rows.Err()
 }
 
 type RecycleItem struct {

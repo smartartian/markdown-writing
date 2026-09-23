@@ -54,6 +54,28 @@ func TestPathAllowed(t *testing.T) {
 	}
 }
 
+func TestAcceptDroppedDocumentAllowsParentDirectory(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "note.md")
+	if err := os.WriteFile(path, []byte("# note"), 0644); err != nil {
+		t.Fatalf("write dropped document: %v", err)
+	}
+
+	app := &App{allowed: make(map[string]struct{})}
+	document, err := app.AcceptDroppedDocument(path)
+	if err != nil {
+		t.Fatalf("AcceptDroppedDocument: %v", err)
+	}
+
+	dir := filepath.Dir(document.Path)
+	if _, err := app.ListDocuments(dir); err != nil {
+		t.Fatalf("ListDocuments after drop: %v", err)
+	}
+	if _, err := app.ListDocumentTree(dir); err != nil {
+		t.Fatalf("ListDocumentTree after drop: %v", err)
+	}
+}
+
 func TestAtomicWriteFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "note.md")

@@ -74,19 +74,6 @@ Expected result:
 - Recovery snapshot remains available.
 - Restart offers recovery or discard.
 
-## External File Changes
-
-- [ ] Open a local Markdown file.
-- [ ] Modify it in another editor.
-- [ ] Delete or rename it externally.
-- [ ] Trigger conflict handling.
-
-Expected result:
-
-- Watcher detects revision or hash changes.
-- The app offers reload, keep local, or save copy.
-- No silent overwrite occurs.
-
 ## Table and Code Block
 
 - [ ] Insert a table with `Cmd/Ctrl + Alt + T`.
@@ -124,7 +111,6 @@ Expected result:
 - No full-document DOM rebuild occurs.
 - Typing remains responsive.
 - Memory growth stabilizes after history compaction.
-
 
 ## Source Peek
 

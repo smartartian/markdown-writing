@@ -14,30 +14,6 @@ export namespace main {
 	        this.openDocs = source["openDocs"];
 	    }
 	}
-	export class DBDocument {
-	    id: number;
-	    name: string;
-	    size: number;
-	    modTime: string;
-	    createdAt: string;
-	    updatedAt: string;
-	    revision: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new DBDocument(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.size = source["size"];
-	        this.modTime = source["modTime"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	        this.revision = source["revision"];
-	    }
-	}
 	export class Document {
 	    name: string;
 	    path: string;
@@ -77,74 +53,6 @@ export namespace main {
 		    }
 		    return a;
 		}
-	}
-	export class DocumentVersion {
-	    id: number;
-	    documentId: number;
-	    revision: number;
-	    name: string;
-	    content: string;
-	    size: number;
-	    createdAt: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new DocumentVersion(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.documentId = source["documentId"];
-	        this.revision = source["revision"];
-	        this.name = source["name"];
-	        this.content = source["content"];
-	        this.size = source["size"];
-	        this.createdAt = source["createdAt"];
-	    }
-	}
-	export class FileDocument {
-	    path: string;
-	    content: string;
-	    revision: number;
-	    contentHash: string;
-	    changed: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new FileDocument(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.path = source["path"];
-	        this.content = source["content"];
-	        this.revision = source["revision"];
-	        this.contentHash = source["contentHash"];
-	        this.changed = source["changed"];
-	    }
-	}
-	export class FileVersion {
-	    id: number;
-	    path: string;
-	    revision: number;
-	    content: string;
-	    contentHash: string;
-	    size: number;
-	    createdAt: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FileVersion(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.path = source["path"];
-	        this.revision = source["revision"];
-	        this.content = source["content"];
-	        this.contentHash = source["contentHash"];
-	        this.size = source["size"];
-	        this.createdAt = source["createdAt"];
-	    }
 	}
 	export class RecycleItem {
 	    id: number;

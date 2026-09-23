@@ -3,6 +3,7 @@ import './style.css';
 import { version as APP_VERSION } from '../package.json';
 import { BrowserOpenURL, EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 import { bootstrapApplication } from './app/bootstrap';
+import { syncDirtyState } from './core/dirty-state.js';
 import { state } from './core/state';
 import { t } from './i18n';
 import { createMarkdownAssetResolver } from './markdown/assets.js';
@@ -35,7 +36,7 @@ import { createSafetyModule } from './modules/safety';
 import { createSettingsModule, matchesShortcut } from './modules/settings';
 import { createAppPluginRuntime } from './plugin-runtime';
 import { isBrowserMode, storage } from './services/document-store';
-import { brandHeroHtml } from './ui/brand';
+import { brandHeroHtml, DEFAULT_LOGO_ID, getLogoUrl } from './ui/brand';
 import { autoResizeTextarea, debounce, escapeHtml, qs } from './ui/dom';
 import { findTextMatches, replaceAllText, replaceTextRange } from './ui/editor/find-replace';
 import { renderIcons as lucideIcons } from './ui/icons';
@@ -48,20 +49,16 @@ import {
   renderOutlineTree,
 } from './ui/outline';
 import { expandDocumentParents } from './ui/paths.js';
-import { getEditableTextOffset, htmlToMarkdown } from './ui/wysiwyg.js';
+import { getEditableTextOffset, renderedHtmlToMarkdown } from "./ui/wysiwyg.js";
 
 const {
   selectDocumentDir: NativeSelectDocumentDir,
   listDocuments: NativeListDocuments,
   listDocumentTree: NativeListDocumentTree,
   readDocument: NativeReadDocument,
-  readDocumentWithMeta: NativeReadDocumentWithMeta,
   readImageAsset: NativeReadImageAsset,
   writeDocument: NativeWriteDocument,
   writeImageAsset: NativeWriteImageAsset,
-  writeDocumentVersioned: WriteDocumentVersioned,
-  listFileVersions: NativeListFileVersions,
-  restoreFileVersion: NativeRestoreFileVersion,
   deleteDocument: NativeDeleteDocument,
   listRecycleBin: NativeListRecycleBin,
   restoreRecycleItem: NativeRestoreRecycleItem,
@@ -98,11 +95,8 @@ const SelectDocumentDir = pluginServiceProxy('workspace', 'selectDirectory', Nat
 const ListDocuments = pluginServiceProxy('workspace', 'listDocuments', NativeListDocuments);
 const ListDocumentTree = pluginServiceProxy('workspace', 'listDocumentTree', NativeListDocumentTree);
 const ReadDocument = pluginServiceProxy('workspace', 'readDocument', NativeReadDocument);
-const ReadDocumentWithMeta = pluginServiceProxy('workspace', 'readDocumentWithMeta', NativeReadDocumentWithMeta);
 const WriteDocument = pluginServiceProxy('workspace', 'writeDocument', NativeWriteDocument);
 const WriteImageAsset = pluginServiceProxy('workspace', 'writeImageAsset', NativeWriteImageAsset);
-const ListFileVersions = pluginServiceProxy('documentStore', 'listFileVersions', NativeListFileVersions);
-const RestoreFileVersion = pluginServiceProxy('documentStore', 'restoreFileVersion', NativeRestoreFileVersion);
 const DeleteDocument = pluginServiceProxy('documentStore', 'deleteDocument', NativeDeleteDocument);
 const ListRecycleBin = pluginServiceProxy('documentStore', 'listRecycleBin', NativeListRecycleBin);
 const RestoreRecycleItem = pluginServiceProxy('documentStore', 'restoreRecycleItem', NativeRestoreRecycleItem);
@@ -199,9 +193,27 @@ let $app;
 // ============================================================
 // 工具
 // ============================================================
-function wordCount(text) {
-  const clean = text.replace(/\s+/g, '');
-  return clean.length;
+const CJK_CHAR_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/g;
+const LATIN_WORD_PATTERN = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
+const PUNCTUATION_PATTERN = /\p{P}/gu;
+
+function computeStats(text) {
+  const source = String(text || '');
+  const cjk = (source.match(CJK_CHAR_PATTERN) || []).length;
+  const latinWords = (source.match(LATIN_WORD_PATTERN) || []).length;
+  return {
+    // 词数：中日韩字符数 + 英文单词数
+    words: cjk + latinWords,
+    characters: source.length,
+    charactersNoSpaces: source.replace(/\s+/g, '').length,
+    cjk,
+    charactersNoPunctuation: source.replace(PUNCTUATION_PATTERN, '').length,
+    lines: source.split('\n').length,
+  };
+}
+
+function formatStatNumber(value) {
+  return Number(value || 0).toLocaleString('en-US');
 }
 
 function formatDate(dateStr) {
@@ -311,24 +323,36 @@ function refreshBlockEditor() {
 }
 
 // 激活指定块
-function activateBlock(index) {
+async function activateBlock(index) {
   const container = qs('#block-editor');
   if (!container) return;
-  const blocks = container.querySelectorAll('.block');
+  let blocks = container.querySelectorAll('.block');
   if (index < 0) index = 0;
   if (index >= blocks.length) index = blocks.length - 1;
 
-  // 先同步当前激活块的 Markdown
-  const prevActive = container.querySelector('.block.active');
+  // 等待当前块的全部同步任务落盘，避免点击切换时用旧源码覆盖刚粘贴的内容。
+  const pendingBlock = container.querySelector('.block.active');
+  if (pendingBlock) await syncRenderedBlock(pendingBlock);
+
+  const refreshedContainer = qs('#block-editor');
+  if (!refreshedContainer) return;
+  blocks = refreshedContainer.querySelectorAll('.block');
+  if (index >= blocks.length) index = blocks.length - 1;
+
+  const prevActive = refreshedContainer.querySelector('.block.active');
   if (prevActive) {
     prevActive.classList.remove('active');
     const prevSource = prevActive.querySelector('.block-source');
     if (prevSource) {
       prevSource.contentEditable = 'false';
-      // 重新渲染上一块的 HTML
-      const raw = (prevSource.textContent || '').replace(/\u200B/g, '').trim();
+      const raw = (prevSource.textContent || '').replace(/\u200B/g, '');
       prevActive.__raw = raw;
-      const rendered = renderBlockHtml(parseSingleBlock(raw, prevActive));
+      const rendered = renderBlockHtml({
+        type: prevActive.dataset.blockType || 'paragraph',
+        raw,
+        level: Number(prevActive.dataset.blockLevel) || undefined,
+        ordered: prevActive.dataset.blockOrdered === 'true',
+      });
       const renderedEl = prevActive.querySelector('.block-rendered');
       if (renderedEl) {
         renderedEl.innerHTML = rendered;
@@ -345,7 +369,6 @@ function activateBlock(index) {
     if (rendered) {
       rendered.contentEditable = 'true';
       rendered.focus();
-      // 光标放到末尾
       const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(rendered);
@@ -354,11 +377,6 @@ function activateBlock(index) {
       sel.addRange(range);
     }
   }
-}
-
-function parseSingleBlock(raw, blockEl) {
-  const parsed = parseMarkdownBlocks(raw || '')[0];
-  return { ...parsed, raw: raw || '' };
 }
 
 // 创建新块（在指定索引后）
@@ -468,11 +486,29 @@ function onBlockClick(e) {
   const idx = parseInt(block.dataset.blockIndex);
   if (!isNaN(idx) && idx !== activeBlockIndex) {
     captureBlockSelection();
-    activateBlock(idx);
+    void activateBlock(idx);
   }
 }
 
 function onBlockInput(e) {
+  // 未能在 beforeinput 阶段拦下的原生撤销/重做（historyUndo/historyRedo）：丢弃 DOM 变更，改用模型级撤销/重做。
+  if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
+    const action = e.inputType === 'historyUndo' ? 'undo' : 'redo';
+    const session = state.editorSession;
+    const result = session ? (action === 'undo' ? session.undo() : session.redo()) : null;
+    if (result) {
+      applyHistoryResult(result, action);
+    } else {
+      const block = e.target.closest?.('.block');
+      const raw = block ? session?.document?.getBlock(block.dataset.blockId)?.raw : null;
+      if (block && typeof raw === 'string') {
+        e.target.textContent = raw;
+        renderBlockFromSource(e.target, block);
+      }
+    }
+    state.suppressNextInput = true;
+    return;
+  }
   if (state.suppressNextInput) {
     state.suppressNextInput = false;
     return;
@@ -522,27 +558,37 @@ function onBlockInput(e) {
 
 function renderedBlockToMarkdown(rendered) {
   const html = rendered.innerHTML;
-  const hasRichMarkup = /<(?:strong|em|code|a|img|mark|del|ul|ol|li|blockquote|pre|table|br)\b/i
-    .test(html);
+  const hasRichMarkup = /<(?:strong|em|code|a|img|mark|del|ul|ol|li|blockquote|pre|table)\b/i.test(html);
   const isPlainParagraph = /^\s*<p(?:\s[^>]*)?>[\s\S]*<\/p>\s*$/i.test(html);
   if (isPlainParagraph && !hasRichMarkup) {
-    return (rendered.textContent || '').replace(/\u200B/g, '').trimEnd();
+    return (rendered.innerText || rendered.textContent || "").replace(/\u200B/g, "").trimEnd();
   }
   return htmlToMarkdown(html);
 }
 
-async function syncRenderedBlock(block) {
+function syncRenderedBlock(block) {
+  if (!block) return Promise.resolve();
+  const previous = block.richSyncPromise || Promise.resolve();
+  const current = previous
+    .catch(() => {})
+    .then(() => syncRenderedBlockNow(block))
+    .catch(() => {});
+  block.richSyncPromise = current;
+  void current.finally(() => {
+    if (block.richSyncPromise === current) delete block.richSyncPromise;
+  });
+  return current;
+}
+
+async function syncRenderedBlockNow(block) {
   if (!block || !state.editorSession?.document) return;
   const rendered = block.querySelector('.block-rendered');
   const source = block.querySelector('.block-source');
   const blockId = block.dataset.blockId;
   if (!rendered || !source || !blockId) return;
 
-  const token = String(Number(block.dataset.richSyncToken || 0) + 1);
-  block.dataset.richSyncToken = token;
   const modelBlock = state.editorSession.document.getBlock(blockId);
   const raw = await renderedBlockToMarkdown(rendered);
-  if (block.dataset.richSyncToken !== token) return;
   const nextRaw = modelBlock
     ? preserveBlockBoundaryNewlines(modelBlock.raw, raw)
     : raw;
@@ -710,6 +756,7 @@ async function splitRenderedBlock(block) {
   });
 }
 
+
 function openSourcePeek() {
   if (state.sourceMode || sourcePeek.isOpen() || !state.editorSession) return;
   captureBlockSelection();
@@ -862,6 +909,14 @@ function deleteCodePointForward(text, offset) {
 
 function onBlockBeforeInput(e) {
   if (compositionController.isActive() || e.isComposing) return;
+  // 原生「编辑」菜单的撤销/重做会直接改写 DOM；拦下来交回编辑器自身的模型级撤销/重做，避免 DOM 与模型分叉。
+  if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
+    e.preventDefault();
+    const action = e.inputType === 'historyUndo' ? 'undo' : 'redo';
+    applyHistoryResult(action === 'undo' ? state.editorSession?.undo() : state.editorSession?.redo(), action);
+    state.suppressNextInput = true;
+    return;
+  }
   const source = e.target;
   const block = source.closest('.block');
   if (!block || !state.editorSession?.document) return;
@@ -994,12 +1049,11 @@ function onBlockBeforeInput(e) {
 
 function renderBlockFromSource(source, block) {
   const raw = (source.textContent || '').replace(/\u200B/g, '');
-  const blockType = parseSingleBlock(raw, block);
+  const parsed = parseMarkdownBlocks(raw)[0] || { type: 'paragraph', raw };
+  const blockType = { ...parsed, raw };
   block.className = getBlockClassName(blockType, true);
   block.dataset.blockType = blockType.type;
-  const newHtml = blockType.raw
-    ? markdownRenderer.render(blockType.raw)
-    : '<p><br></p>';
+  const newHtml = raw ? markdownRenderer.render(raw) : '<p><br></p>';
   const renderedEl = block.querySelector('.block-rendered');
   if (renderedEl) {
     renderedEl.innerHTML = newHtml || '<p><br></p>';
@@ -1011,7 +1065,6 @@ function onBlockCompositionStart(e) {
   const source = e.target;
   const block = source.closest('.block');
   if (!block) return;
-  state.isDirty = true;
   compositionController.start({
     blockId: block.dataset.blockId,
     raw: source.textContent || '',
@@ -1058,6 +1111,7 @@ function onBlockCompositionEnd(e) {
 function onBlockCompositionCancel() {
   if (!compositionController.isActive()) return;
   compositionController.cancel();
+  updateTitleDirty();
 }
 
 function onBlockDragOver(e) {
@@ -1125,25 +1179,20 @@ async function onBlockPaste(e) {
 async function createImageMarkdown(file) {
   const encoded = await fileToBase64(file);
   const imageDir = getSetting('files.imageDir', 'assets');
-  const configuredWidth = Number(getSetting('files.imageWidth', 100));
-  const imageWidth = Number.isFinite(configuredWidth)
-    ? Math.max(10, Math.min(100, Math.round(configuredWidth)))
-    : 100;
-  const widthAttribute = imageWidth < 100 ? `{width=${imageWidth}%}` : '';
   const documentPath = state.currentDoc?.path;
   const alt = String(file.name || 'image').replace(/[\[\]]/g, '');
 
   if (documentPath && typeof WriteImageAsset === 'function') {
     try {
       const relativePath = await WriteImageAsset(documentPath, imageDir, file.name || 'image.png', encoded);
-      return `![${alt}](${relativePath})${widthAttribute}`;
+      return `![${alt}](${relativePath})`;
     } catch (error) {
       console.error('保存图片资源失败，回退为内嵌图片:', error);
     }
   }
 
   const mime = file.type || 'image/png';
-  return `![${alt}](data:${mime};base64,${encoded})${widthAttribute}`;
+  return `![${alt}](data:${mime};base64,${encoded})`;
 }
 
 async function fileToBase64(file) {
@@ -1443,7 +1492,7 @@ function onBlockKeydown(e) {
     const range = sel.getRangeAt(0);
     if (range.startOffset === 0 && range.collapsed && idx > 0) {
       e.preventDefault();
-      activateBlock(idx - 1);
+      void activateBlock(idx - 1);
       return;
     }
   }
@@ -1457,7 +1506,7 @@ function onBlockKeydown(e) {
     const blockEls = container.querySelectorAll('.block');
     if (range.endOffset >= (source.textContent || '').length && range.collapsed && idx < blockEls.length - 1) {
       e.preventDefault();
-      activateBlock(idx + 1);
+      void activateBlock(idx + 1);
       return;
     }
   }
@@ -1469,7 +1518,7 @@ function onContainerClick(e) {
   const container = qs('#block-editor');
   const blocks = container.querySelectorAll('.block');
   if (blocks.length > 0) {
-    activateBlock(blocks.length - 1);
+    void activateBlock(blocks.length - 1);
   }
 }
 
@@ -1477,21 +1526,19 @@ function onContainerClick(e) {
 // 首页（启动画面）
 // ============================================================
 async function openDocumentByPath(path) {
-  const meta = await ReadDocumentWithMeta(path);
-  const content = meta.content;
+  const content = await ReadDocument(path);
   const name = path.split('/').pop().replace(/\\/g, '/').split('/').pop();
   const dir = path.substring(0, path.lastIndexOf('/')) || '/';
 
   state.docDir = dir;
   state.currentDoc = { name, path, size: content.length, modTime: '' };
   state.currentContent = content;
-  state.currentRevision = meta.revision || 0;
-  state.currentHash = meta.contentHash || '';
+  state.persistedContent = content;
   state.view = 'editor';
   state.isEditor = true;
-  state.sidebarCollapsed = false;
+  // 通过单个文件进入（打开文件 / 最近文件）时默认收起侧栏。
+  state.sidebarCollapsed = true;
   state.expandedDirs.clear();
-  safety.startFileWatcher(path);
   try { AddRecentFile(path, name); } catch (e) {}
   try {
     state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
@@ -1529,10 +1576,10 @@ function renderHome() {
 
   $app.innerHTML = `
     <div class="home-shell app-shell-page home-page">
-      <section class="app-panel home-surface">
+      <section class="app-panel home-surface" id="home-surface">
         <div class="home-center">
           <header class="home-hero">
-            <h1 class="home-title">Markdown Writing</h1>
+            <img class="home-logo" src="${getLogoUrl(getSetting('appearance.logo', DEFAULT_LOGO_ID))}" alt="">
             <p class="home-subtitle">${t('main.homeSubtitle')}</p>
           </header>
           <div class="home-actions">
@@ -1556,19 +1603,28 @@ function renderHome() {
             </div>
           </section>
         </div>
+        <div class="home-drop-overlay" id="home-drop-overlay" aria-hidden="true">
+          <div class="home-drop-indicator">
+            <svg data-lucide="file-up" width="28" height="28" stroke="currentColor" fill="none" stroke-width="1.6"></svg>
+            <strong>${t('main.homeDropTitle')}</strong>
+            <span>${t('main.homeDropHint')}</span>
+          </div>
+        </div>
       </section>
     </div>
   `;
 
   lucideIcons();
+  hookHomeDropEvents();
 
   qs('#home-action-new-doc')?.addEventListener('click', () => {
     state.currentDoc = { id: null, name: `${t('main.untitled')}.md` };
     state.currentContent = '';
-    state.currentRevision = 0;
-    state.currentHash = '';
+    state.persistedContent = '';
     state.isDirty = false;
     state.view = 'editor';
+    // 首页新建文档同样按「单个文档」处理：进编辑器时左侧面板保持收起。
+    state.sidebarCollapsed = true;
     renderEditor();
   });
 
@@ -1586,6 +1642,8 @@ function renderHome() {
       const dir = await SelectDocumentDir();
       if (!dir) return;
       state.docDir = dir;
+      // 打开的是工作区，侧栏保持展开。
+      state.sidebarCollapsed = false;
       state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
       state.docTree = await ListDocumentTree(dir) || [];
       state.view = 'editor';
@@ -1616,14 +1674,12 @@ async function initLibrary() {
   state.isEditor = true;
   state.currentDoc = null;
   state.currentContent = '';
-  state.currentRevision = 0;
-  state.currentHash = '';
+  state.persistedContent = '';
   state.selection = null;
   state.selectionIndex = null;
   compositionController.cancel();
   state.editorSession = null;
   resetParseResult();
-  safety.stopFileWatcher();
 
   const docs = await ListDocuments(state.docDir) || [];
   state.docs = docs.filter(d => d.name.endsWith('.md') || d.isDir);
@@ -1643,8 +1699,6 @@ async function openEditor(doc) {
   state.currentDoc = doc;
   state.view = 'editor';
   state.isEditor = true;
-  state.currentRevision = 0;
-  state.currentHash = '';
   state.selection = null;
   state.selectionIndex = null;
   compositionController.cancel();
@@ -1653,15 +1707,11 @@ async function openEditor(doc) {
 
   if (doc.path) {
     try {
-      const result = await ReadDocumentWithMeta(doc.path);
-      state.currentContent = result?.content ?? await ReadDocument(doc.path);
-      state.currentRevision = result?.revision || 0;
-      state.currentHash = result?.contentHash || '';
-      safety.startFileWatcher(doc.path);
-      if (result?.changed) safety.showExternalChangeDialog(result);
+      state.currentContent = await ReadDocument(doc.path);
+      state.persistedContent = state.currentContent;
     } catch (e) {
       state.currentContent = '';
-      safety.stopFileWatcher();
+      state.persistedContent = '';
     }
     // 记录最近打开文件
     try { AddRecentFile(doc.path, doc.name); } catch (e) {}
@@ -1674,6 +1724,7 @@ async function openEditor(doc) {
 }
 
 async function openDroppedFiles(paths) {
+  hideHomeDropIndicator();
   const markdownPath = (paths || []).find(path => /\.(md|markdown)$/i.test(path));
   if (!markdownPath) {
     if (paths?.length) showAppToast(t('main.dropUnsupported'), { error: true });
@@ -1684,6 +1735,8 @@ async function openDroppedFiles(paths) {
     const document = await AcceptDroppedDocument(markdownPath);
     const dir = markdownPath.substring(0, markdownPath.lastIndexOf('/')) || '/';
     state.docDir = dir;
+    // 拖入的是单个文件，默认收起侧栏。
+    state.sidebarCollapsed = true;
     state.expandedDirs.clear();
     try {
       state.docs = (await ListDocuments(dir) || []).filter(item => item.name.endsWith('.md') || item.isDir);
@@ -1699,6 +1752,76 @@ async function openDroppedFiles(paths) {
   }
 }
 
+async function openBrowserDroppedFiles(files) {
+  hideHomeDropIndicator();
+  const markdownFile = [...(files || [])].find(file => /\.(md|markdown)$/i.test(file.name || ''));
+  if (!markdownFile) {
+    if (files?.length) showAppToast(t('main.dropUnsupported'), { error: true });
+    return;
+  }
+  try {
+    await saveCurrentDoc();
+    const document = await storage.acceptBrowserDroppedDocument?.(markdownFile);
+    if (!document) throw new Error('Browser file drop is unavailable');
+    const dir = document.path.substring(0, document.path.lastIndexOf('/')) || '/';
+    state.docDir = dir;
+    // 拖入的是单个文件，默认收起侧栏。
+    state.sidebarCollapsed = true;
+    state.expandedDirs.clear();
+    state.docs = [{ ...document, isDir: false }];
+    state.docTree = [{ ...document, isDir: false }];
+    await openEditor(document);
+    showAppToast(t('main.dropOpened', { name: document.name }));
+  } catch (error) {
+    showAppToast(t('main.dropFailed', { message: error?.message || error }), { error: true });
+  }
+}
+
+let homeDropDepth = 0;
+
+function setHomeDropIndicator(active) {
+  qs('#home-surface')?.classList.toggle('is-dragging-file', active);
+  qs('#home-drop-overlay')?.classList.toggle('visible', active);
+  qs('#home-drop-overlay')?.setAttribute('aria-hidden', String(!active));
+}
+
+function hideHomeDropIndicator() {
+  homeDropDepth = 0;
+  setHomeDropIndicator(false);
+}
+
+function hookHomeDropEvents() {
+  const zone = qs('#home-surface');
+  if (!zone) return;
+  const hasFiles = event => [...(event.dataTransfer?.types || [])].includes('Files');
+
+  zone.addEventListener('dragenter', event => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    homeDropDepth += 1;
+    setHomeDropIndicator(true);
+  });
+  zone.addEventListener('dragover', event => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setHomeDropIndicator(true);
+  });
+  zone.addEventListener('dragleave', event => {
+    if (!hasFiles(event)) return;
+    homeDropDepth = Math.max(0, homeDropDepth - 1);
+    if (homeDropDepth === 0) setHomeDropIndicator(false);
+  });
+  zone.addEventListener('drop', event => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    hideHomeDropIndicator();
+    if (isBrowserMode()) {
+      void openBrowserDroppedFiles(event.dataTransfer?.files);
+    }
+  });
+}
+
 function exportDropdownHtml(id, extraClass = '') {
   return `
     <div class="export-dropdown ${extraClass} hidden" id="${id}">
@@ -1710,17 +1833,48 @@ function exportDropdownHtml(id, extraClass = '') {
   `;
 }
 
+// 底部状态栏的字数按钮 + 点击展开的统计面板
+function wordStatsHtml(stats) {
+  const row = (id, key, labelKey) => `
+                <div class="word-stats-row">
+                  <dt data-i18n="${labelKey}">${t(labelKey)}</dt>
+                  <dd id="${id}">${formatStatNumber(stats?.[key])}</dd>
+                </div>`;
+  return `
+          <div class="word-stats-wrapper">
+            <button class="word-stats-button" id="btn-word-stats" type="button" aria-haspopup="true" aria-expanded="false" title="${t('main.stats.title')}" data-i18n-title="main.stats.title">
+              <span id="word-stats-label">${t('main.wordCount', { count: formatStatNumber(stats?.words) })}</span>
+            </button>
+            <div class="word-stats-panel hidden" id="word-stats-panel" role="dialog" aria-label="${t('main.stats.title')}">
+              <div class="word-stats-heading" data-i18n="main.stats.title">${t('main.stats.title')}</div>
+              <dl class="word-stats-list">
+                ${row('stat-words', 'words', 'main.stats.words')}
+                ${row('stat-characters', 'characters', 'main.stats.characters')}
+                ${row('stat-characters-no-spaces', 'charactersNoSpaces', 'main.stats.charactersNoSpaces')}
+                ${row('stat-characters-no-punctuation', 'charactersNoPunctuation', 'main.stats.charactersNoPunctuation')}
+                ${row('stat-lines', 'lines', 'main.stats.lines')}
+              </dl>
+            </div>
+          </div>`;
+}
+
 // 根据路径在文件树中查找文档节点
 function renderEditor() {
   sourcePeek.close();
   closeFindReplace({ restoreFocus: false });
   disposeWorkspacePanel?.();
   disposeWorkspacePanel = null;
-  workspacePanel = 'files';
+  workspacePanel = 'documents';
   currentSidebarView = 'filetree';
   const name = state.currentDoc ? fileNameWithoutExt(state.currentDoc.name) : t('main.untitled');
-  const wc = wordCount(state.currentContent || '');
+  const stats = computeStats(state.currentContent || '');
   const hasDoc = !!state.currentDoc;
+
+  // 底部状态栏左下角的侧栏开关（有文档 / 无文档 共用，位置固定）
+  const sidebarToggleHtml = `
+          <button class="sidebar-icon${state.sidebarCollapsed ? '' : ' is-active'}" id="btn-toggle-panel" type="button" title="${t('main.toggleSidebar')}" data-i18n-title="main.toggleSidebar" aria-pressed="${state.sidebarCollapsed ? 'false' : 'true'}">
+            <svg data-lucide="panel-left" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          </button>`;
 
   // Build file tree (recursive from state.docTree)
   const fileTreeHtml = buildFileTreeHtml(state.docTree, 0);
@@ -1749,19 +1903,15 @@ function renderEditor() {
 
       <footer class="app-panel editor-statusbar statusbar">
         <div class="statusbar-left">
-          <span id="mode-indicator">
-            <svg data-lucide="${state.sourceMode ? 'code' : 'eye'}" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-            <span>${state.sourceMode ? t('main.mode.source') : t('main.mode.preview')}</span>
-          </span>
+          ${sidebarToggleHtml}
         </div>
         <div class="statusbar-right">
-          <span id="line-count">${t('main.lines', { count: String(state.currentContent || '').split('\n').length })}</span>
+          ${wordStatsHtml(stats)}
           <span class="statusbar-divider">|</span>
-          <span id="word-count">${t('main.words', { count: wc })}</span>
+          <button class="sidebar-icon" id="mode-indicator" type="button" title="${state.sourceMode ? t('main.mode.source') : t('main.mode.preview')}" data-i18n-title="${state.sourceMode ? 'main.mode.source' : 'main.mode.preview'}">
+            <svg data-lucide="${state.sourceMode ? 'code' : 'eye'}" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
+          </button>
           <div class="editor-titlebar-actions">
-            <button class="sidebar-icon" id="btn-history" title="${t('main.history')}">
-              <svg data-lucide="history" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
-            </button>
             <button class="sidebar-icon" id="btn-delete-doc" title="${t('main.delete')}">
               <svg data-lucide="trash-2" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
             </button>
@@ -1779,7 +1929,7 @@ function renderEditor() {
     rightPanelHtml = `
       <div class="app-panel welcome-panel" id="welcome-panel">
         <div class="welcome-panel-inner welcome-dashboard">
-          ${brandHeroHtml()}
+          ${brandHeroHtml(getSetting('appearance.logo', DEFAULT_LOGO_ID))}
           <div class="welcome-action-grid" id="welcome-panel-actions">
             <button class="welcome-dashboard-action welcome-dashboard-action-primary" id="wp-new-doc">
               <span class="welcome-dashboard-icon">
@@ -1809,7 +1959,13 @@ function renderEditor() {
             </button>
           </div>
         </div>
-      </div>`;
+      </div>
+
+      <footer class="app-panel editor-statusbar statusbar">
+        <div class="statusbar-left">
+          ${sidebarToggleHtml}
+        </div>
+      </footer>`;
   }
 
   $app.innerHTML = `
@@ -1822,22 +1978,20 @@ function renderEditor() {
               <span class="sidebar-app-name" id="sidebar-title"></span>
             </div>
           </header>
-          <nav class="workspace-nav workspace-nav-primary" aria-label="文档导航">
-            <button class="workspace-nav-item active" type="button" data-workspace-nav="files">
-              <svg data-lucide="folder" width="15" height="15"></svg>
-              <span data-i18n="main.nav.files">${t('main.nav.files')}</span>
-            </button>
-            <button class="workspace-nav-item" type="button" data-workspace-nav="outline">
-              <svg data-lucide="list" width="15" height="15"></svg>
-              <span data-i18n="main.nav.outline">${t('main.nav.outline')}</span>
-            </button>
-          </nav>
+          <div class="workspace-nav workspace-nav-switch">
+            <div class="workspace-view-switch" role="tablist" aria-label="${t('main.files')} / ${t('main.nav.outline')}">
+              <button class="workspace-view-option is-active" type="button" role="tab" data-sidebar-view="files" aria-selected="true" aria-controls="file-tree-nav" title="${t('main.nav.files')}">
+                <svg data-lucide="folder" width="15" height="15"></svg>
+                <span data-i18n="main.nav.files">${t('main.nav.files')}</span>
+              </button>
+              <button class="workspace-view-option" type="button" role="tab" data-sidebar-view="outline" aria-selected="false" aria-controls="file-tree-outline" title="${t('main.nav.outline')}">
+                <svg data-lucide="list" width="15" height="15"></svg>
+                <span data-i18n="main.nav.outline">${t('main.nav.outline')}</span>
+              </button>
+            </div>
+          </div>
           <div class="sidebar-document-context" id="sidebar-document-context">
-            <div class="sidebar-context-header">
-              <div class="sidebar-context-title">
-                <span class="sidebar-section-kicker" id="sidebar-section-kicker">FILES</span>
-                <span class="sidebar-section-title" id="sidebar-section-title" data-i18n="main.files">${t('main.files')}</span>
-              </div>
+            <div class="sidebar-context-header" id="sidebar-context-header">
               <button class="sidebar-icon" id="sidebar-search-btn" title="${t('main.search')}" data-i18n-title="main.search">
                 <svg data-lucide="search" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>
               </button>
@@ -1861,19 +2015,11 @@ function renderEditor() {
               <svg data-lucide="settings" width="15" height="15"></svg>
               <span data-i18n="main.nav.settings">${t('main.nav.settings')}</span>
             </button>
-            <button class="workspace-nav-item workspace-nav-item-icon" id="btn-toggle-panel" type="button" title="${t('main.toggleSidebar')}" data-i18n-title="main.toggleSidebar">
-              <svg data-lucide="panel-left" width="15" height="15"></svg>
-            </button>
           </nav>
         </aside>
 
         <!-- 文件树与正文区之间的拖拽把手 -->
         <div class="panel-resizer editor-sidebar-resizer" id="sidebar-resizer" title="${t('main.dragSidebar')}"></div>
-
-        <!-- 折叠后：左侧边缘悬浮展开按钮 -->
-        <button class="sidebar-reopen ${state.sidebarCollapsed ? 'visible' : ''}" id="sidebar-reopen" title="${t('main.expandSidebar')}">
-          <svg data-lucide="chevron-right" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.8"></svg>
-        </button>
 
         <!-- 写作区 -->
         <div class="editor-writing-area">
@@ -1983,9 +2129,10 @@ function hookWelcomePanelEvents() {
   btn.addEventListener('click', () => {
     state.currentDoc = { id: null, name: `${t('main.untitled')}.md` };
     state.currentContent = '';
-    state.currentRevision = 0;
-    state.currentHash = '';
+    state.persistedContent = '';
     state.isDirty = false;
+    // 新建文档同样按「单个文档」处理：进入编辑时左侧面板保持收起。
+    state.sidebarCollapsed = true;
     renderEditor();
   });
 
@@ -1995,17 +2142,16 @@ function hookWelcomePanelEvents() {
       try {
         const path = await OpenDocumentFile();
         if (!path) return;
-        const meta = await ReadDocumentWithMeta(path);
-        const content = meta.content;
+        const content = await ReadDocument(path);
         const name = path.split('/').pop();
         const dir = path.substring(0, path.lastIndexOf('/')) || '/';
         state.docDir = dir;
         state.currentDoc = { name, path, size: content.length, modTime: '' };
         state.currentContent = content;
-        state.currentRevision = meta.revision || 0;
-        state.currentHash = meta.contentHash || '';
-        safety.startFileWatcher(path);
+        state.persistedContent = content;
         try { AddRecentFile(path, name); } catch (e) {}
+        // 通过单个文件进入时默认收起侧栏。
+        state.sidebarCollapsed = true;
         state.expandedDirs.clear();
         try {
           state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
@@ -2026,6 +2172,8 @@ function hookWelcomePanelEvents() {
         const dir = await SelectDocumentDir();
         if (dir) {
           state.docDir = dir;
+          // 打开的是工作区，侧栏保持展开。
+          state.sidebarCollapsed = false;
           state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
           state.docTree = (await ListDocumentTree(dir) || []);
           renderEditor();
@@ -2040,17 +2188,16 @@ function hookWelcomePanelEvents() {
     if (!item) return;
     const path = item.dataset.path;
     try {
-      const meta = await ReadDocumentWithMeta(path);
-      const content = meta.content;
+      const content = await ReadDocument(path);
       const name = path.split('/').pop();
       const dir = path.substring(0, path.lastIndexOf('/')) || '/';
       state.docDir = dir;
       state.currentDoc = { name, path, size: content.length, modTime: '' };
       state.currentContent = content;
-      state.currentRevision = meta.revision || 0;
-      state.currentHash = meta.contentHash || '';
-      safety.startFileWatcher(path);
+      state.persistedContent = content;
       try { AddRecentFile(path, name); } catch (e) {}
+      // 通过单个文件进入时默认收起侧栏。
+      state.sidebarCollapsed = true;
       try {
         state.docs = (await ListDocuments(dir) || []).filter(d => d.name.endsWith('.md') || d.isDir);
         state.docTree = (await ListDocumentTree(dir) || []);
@@ -2066,31 +2213,37 @@ function hookWelcomePanelEvents() {
 let autoSaveTimer = null;
 let findReplaceSession = null;
 
+// 侧栏内容（文件树 / 大纲）与主区域页面（文档 / 设置）分开记录：打开设置时侧栏继续
+// 展示当前的文件树或大纲，不再隐藏、也不再重置回文件树。
 let currentSidebarView = 'filetree';
-let workspacePanel = 'files';
+let workspacePanel = 'documents';
 let disposeWorkspacePanel = null;
 let editorDocumentEventsBound = false;
 
 function toggleSidebarPanel() {
   state.sidebarCollapsed = !state.sidebarCollapsed;
   const container = qs('#file-tree-container');
-  const reopen = qs('#sidebar-reopen');
   if (state.sidebarCollapsed) {
     container?.classList.add('collapsed');
-    reopen?.classList.add('visible');
     applySidebarWidth(0);
   } else {
     container?.classList.remove('collapsed');
-    reopen?.classList.remove('visible');
+    if (state.sidebarWidth < SIDEBAR_MIN_WIDTH) state.sidebarWidth = SIDEBAR_DEFAULT_WIDTH;
     applySidebarWidth(state.sidebarWidth);
   }
+  syncSidebarToggleState();
+}
+
+// 点击分段控件切换侧栏内容（文件树 / 大纲），不影响主区域当前页面（如设置）。
+function setSidebarView(view) {
+  currentSidebarView = view === 'outline' ? 'outline' : 'filetree';
+  updateSidebarView();
 }
 
 function updateSidebarView() {
   const tree = qs('#file-tree-nav');
   const outline = qs('#file-tree-outline');
-  const sectionTitle = qs('#sidebar-section-title');
-  const sectionKicker = qs('#sidebar-section-kicker');
+  const contextHeader = qs('#sidebar-context-header');
   const searchBtn = qs('#sidebar-search-btn');
   const newFileBtn = qs('#sidebar-new-file-btn');
 
@@ -2099,17 +2252,24 @@ function updateSidebarView() {
     outline?.classList.add('hidden');
     searchBtn?.classList.remove('icon-placeholder');
     newFileBtn?.classList.remove('hidden');
-    if (sectionKicker) sectionKicker.textContent = 'FILES';
-    if (sectionTitle) sectionTitle.textContent = t('main.files');
+    contextHeader?.classList.remove('hidden');
   } else {
     tree?.classList.add('hidden');
     outline?.classList.remove('hidden');
     searchBtn?.classList.add('icon-placeholder');
     newFileBtn?.classList.add('hidden');
-    if (sectionKicker) sectionKicker.textContent = 'OUTLINE';
-    if (sectionTitle) sectionTitle.textContent = t('main.outline');
+    // 大纲视图下两个图标都不可用，整行收起，标题行不再留空
+    contextHeader?.classList.add('hidden');
     generateOutline();
   }
+  // 分段控件跟随当前侧栏内容
+  const activeView = currentSidebarView === 'outline' ? 'outline' : 'files';
+  document.querySelectorAll('[data-sidebar-view]').forEach(item => {
+    const isActive = item.dataset.sidebarView === activeView;
+    item.classList.toggle('is-active', isActive);
+    item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+
   // Hide search when switching views
   qs('#sidebar-search')?.classList.add('hidden');
   const searchInput = qs('#sidebar-search-input');
@@ -2117,48 +2277,49 @@ function updateSidebarView() {
 }
 
 function setWorkspacePanel(panel) {
-  disposeWorkspacePanel?.();
-  disposeWorkspacePanel = null;
-  workspacePanel = panel;
-  document.querySelectorAll('[data-workspace-nav]').forEach(item => {
-    item.classList.toggle('active', item.dataset.workspaceNav === panel);
-  });
-
-  const documentContext = qs('#sidebar-document-context');
   const documentView = qs('#editor-document-view');
   const workspaceHost = qs('#editor-workspace-host');
   if (!documentView || !workspaceHost) return;
 
-  if (panel === 'files' || panel === 'outline') {
-    currentSidebarView = panel === 'files' ? 'filetree' : 'outline';
-    documentContext?.classList.remove('hidden');
+  const isSettings = panel === 'settings';
+
+  if (!isSettings) {
+    disposeWorkspacePanel?.();
+    disposeWorkspacePanel = null;
+  }
+  workspacePanel = isSettings ? 'settings' : 'documents';
+  document.querySelectorAll('[data-workspace-nav]').forEach(item => {
+    item.classList.toggle('active', item.dataset.workspaceNav === workspacePanel);
+  });
+
+  // 侧栏（文件树 / 大纲）在主区域切到设置时保持不动：既不清空内容，也不重置选择。
+  qs('#sidebar-document-context')?.classList.remove('hidden');
+  workspaceHost.innerHTML = '';
+
+  if (!isSettings) {
     documentView.classList.remove('hidden');
     workspaceHost.classList.add('hidden');
-    workspaceHost.innerHTML = '';
     updateSidebarView();
     return;
   }
 
-  documentContext?.classList.add('hidden');
   documentView.classList.add('hidden');
   workspaceHost.classList.remove('hidden');
-  workspaceHost.innerHTML = '';
-
-  if (panel === 'settings') {
-    void openSettingsModal({
-      container: workspaceHost,
-      onClose: () => {
-        setWorkspacePanel('files');
-        renderEditor();
-      },
-    }).then(handle => {
-      if (workspacePanel === 'settings') {
-        disposeWorkspacePanel = () => handle?.dispose?.();
-      }
-    });
-    return;
-  }
-
+  void openSettingsModal({
+    container: workspaceHost,
+    onClose: () => {
+      // 关闭前记下侧栏当前展示的内容，重建 DOM 之后再恢复，避免被打回文件树。
+      const sidebarView = currentSidebarView;
+      setWorkspacePanel('documents');
+      renderEditor();
+      currentSidebarView = sidebarView;
+      setSidebarView(sidebarView);
+    },
+  }).then(handle => {
+    if (workspacePanel === 'settings') {
+      disposeWorkspacePanel = () => handle?.dispose?.();
+    }
+  });
 }
 
 function ensureFindReplacePanel() {
@@ -2363,7 +2524,7 @@ function focusFindMatch(match) {
     .find(element => element.dataset.blockId === match.blockId);
   if (!block) return;
   const index = Number(block.dataset.blockIndex);
-  if (Number.isInteger(index) && index !== activeBlockIndex) activateBlock(index);
+  if (Number.isInteger(index) && index !== activeBlockIndex) void activateBlock(index);
   const rendered = block.querySelector('.block-rendered[contenteditable="true"]');
   if (rendered) {
     rendered.focus();
@@ -2568,19 +2729,18 @@ function applySidebarWidth(width) {
   if (body) body.style.setProperty('--editor-sidebar-width', Math.round(width) + 'px');
 }
 
+// 侧栏开关按钮的选中态：侧栏展开时高亮
+function syncSidebarToggleState() {
+  const btn = qs('#btn-toggle-panel');
+  if (!btn) return;
+  const expanded = !state.sidebarCollapsed;
+  btn.classList.toggle('is-active', expanded);
+  btn.setAttribute('aria-pressed', String(expanded));
+}
+
 function hookSidebarResize() {
   const container = qs('#file-tree-container');
   const resizer = qs('#sidebar-resizer');
-  const reopen = qs('#sidebar-reopen');
-
-  // 展开按钮
-  reopen?.addEventListener('click', () => {
-    state.sidebarCollapsed = false;
-    if (state.sidebarWidth < SIDEBAR_MIN_WIDTH) state.sidebarWidth = SIDEBAR_DEFAULT_WIDTH;
-    container?.classList.remove('collapsed');
-    reopen.classList.remove('visible');
-    applySidebarWidth(state.sidebarWidth);
-  });
 
   if (!resizer || !container) return;
 
@@ -2601,6 +2761,7 @@ function hookSidebarResize() {
       state.sidebarCollapsed = false;
       container.classList.remove('collapsed');
       applySidebarWidth(next);
+      syncSidebarToggleState();
     },
     onCollapse: () => {
       state.sidebarCollapsed = true;
@@ -2608,7 +2769,7 @@ function hookSidebarResize() {
       container.classList.remove('resizing');
       container.classList.add('collapsed');
       applySidebarWidth(0);
-      reopen?.classList.add('visible');
+      syncSidebarToggleState();
     },
     // 窄窗口下侧栏改为浮层，此时不响应拖动
     isBlocked: () => getComputedStyle(container).position === 'absolute',
@@ -2617,9 +2778,14 @@ function hookSidebarResize() {
 }
 
 function hookEditorEvents() {
-  // 左侧导航切换
+  // 左侧导航切换（应用导航：设置）
   document.querySelectorAll('[data-workspace-nav]').forEach(item => {
     item.addEventListener('click', () => setWorkspacePanel(item.dataset.workspaceNav));
+  });
+
+  // 侧栏内容切换（文件树 / 大纲合并后的分段控件）
+  document.querySelectorAll('[data-sidebar-view]').forEach(item => {
+    item.addEventListener('click', () => setSidebarView(item.dataset.sidebarView));
   });
 
   // 面板开关（折叠/展开文件树侧栏）
@@ -2649,12 +2815,30 @@ function hookEditorEvents() {
     });
   });
 
+  // 状态栏字数统计（点击按钮展开/收起统计面板）
+  const statsTrigger = qs('#btn-word-stats');
+  const statsPanel = qs('#word-stats-panel');
+  statsTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const shouldOpen = statsPanel?.classList.contains('hidden');
+    if (shouldOpen) updateWordCount();
+    statsPanel?.classList.toggle('hidden', !shouldOpen);
+    statsTrigger.classList.toggle('is-active', Boolean(shouldOpen));
+    statsTrigger.setAttribute('aria-expanded', String(Boolean(shouldOpen)));
+  });
+
   // 点击其他区域关闭导出下拉
   if (!editorDocumentEventsBound) {
     editorDocumentEventsBound = true;
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.export-wrapper')) {
         document.querySelectorAll('.export-dropdown').forEach(menu => menu.classList.add('hidden'));
+      }
+      if (!e.target.closest('.word-stats-wrapper')) {
+        qs('#word-stats-panel')?.classList.add('hidden');
+        const trigger = qs('#btn-word-stats');
+        trigger?.classList.remove('is-active');
+        trigger?.setAttribute('aria-expanded', 'false');
       }
     });
     document.addEventListener('selectionchange', debounce(captureBlockSelection, 80));
@@ -2687,7 +2871,7 @@ function hookEditorEvents() {
     }
     const index = parseInt(item.dataset.blockIndex || '', 10);
     if (Number.isNaN(index)) return;
-    activateBlock(index);
+    void activateBlock(index);
     qs('#block-editor')?.querySelectorAll('.block')[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
@@ -2698,7 +2882,6 @@ function hookEditorEvents() {
   hookSidebarResize();
 
   // 文档操作
-  qs('#btn-history')?.addEventListener('click', () => safety.openHistory());
   qs('#btn-delete-doc')?.addEventListener('click', deleteCurrentDocument);
 
   // === 源码编辑器事件 ===
@@ -2751,7 +2934,9 @@ function toggleSourceMode() {
     autoResizeTextarea(sourceEditor);
     sourceEditor.focus();
     if (modeIndicator) {
-      modeIndicator.innerHTML = `<svg data-lucide="code" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>${t('main.mode.source')}</span>`;
+      modeIndicator.innerHTML = `<svg data-lucide="code" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>`;
+      modeIndicator.title = t('main.mode.source');
+      modeIndicator.dataset.i18nTitle = 'main.mode.source';
       lucideIcons();
     }
   } else {
@@ -2774,7 +2959,9 @@ function toggleSourceMode() {
       : null;
     restoreBlockSelection();
     if (modeIndicator) {
-      modeIndicator.innerHTML = `<svg data-lucide="eye" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.5"></svg> <span>${t('main.mode.preview')}</span>`;
+      modeIndicator.innerHTML = `<svg data-lucide="eye" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.5"></svg>`;
+      modeIndicator.title = t('main.mode.preview');
+      modeIndicator.dataset.i18nTitle = 'main.mode.preview';
       lucideIcons();
     }
     updateWordCount();
@@ -2829,12 +3016,18 @@ function updateWordCount() {
   } else {
     md = collectBlocksMarkdown();
   }
-  const wc = wordCount(md);
-  const wcEl = qs('#word-count');
-  if (wcEl) wcEl.textContent = t('main.words', { count: wc });
-  const lines = (md || '').split('\n').length;
-  const lcEl = qs('#line-count');
-  if (lcEl) lcEl.textContent = t('main.lines', { count: lines });
+  const stats = computeStats(md);
+  const label = qs('#word-stats-label');
+  if (label) label.textContent = t('main.wordCount', { count: formatStatNumber(stats.words) });
+  const setStatValue = (selector, value) => {
+    const el = qs(selector);
+    if (el) el.textContent = formatStatNumber(value);
+  };
+  setStatValue('#stat-words', stats.words);
+  setStatValue('#stat-characters', stats.characters);
+  setStatValue('#stat-characters-no-spaces', stats.charactersNoSpaces);
+  setStatValue('#stat-characters-no-punctuation', stats.charactersNoPunctuation);
+  setStatValue('#stat-lines', stats.lines);
 }
 
 function syncIncrementalBlocks(changedBlockIds) {
@@ -3014,6 +3207,7 @@ function restoreBlockSelection() {
 
 function scheduleAutoSave() {
   clearTimeout(autoSaveTimer);
+  updateTitleDirty();
   void safety.persistRecoverySnapshot();
   void scheduleEditorShadowComparison(getCurrentMd());
   void parserWorker.compare(getCurrentMd()).then(result => {
@@ -3026,7 +3220,6 @@ function scheduleAutoSave() {
     if (!state.currentDoc?.path) return;
     saveCurrentDoc();
   }, getSetting('editor.autosaveDelay', 2000));
-  updateTitleDirty();
 }
 
 let saveInProgress = false;
@@ -3073,6 +3266,7 @@ async function performSave(saveAs = false) {
     if (nextDoc) state.currentDoc = nextDoc;
     if (state.currentDoc === docSnapshot || nextDoc) {
       state.currentContent = md;
+      state.persistedContent = md;
       state.currentDoc.name = fileNameWithoutExt(state.currentDoc.name) + '.md';
     }
     const sameTargetDoc = nextDoc ? state.currentDoc === nextDoc : state.currentDoc === docSnapshot;
@@ -3093,21 +3287,12 @@ async function performSave(saveAs = false) {
       const doc = await SaveDocumentAs(md);
       if (doc) {
         finishSaveState(doc);
-        const meta = await ReadDocumentWithMeta(doc.path);
-        state.currentRevision = meta?.revision || 0;
-        state.currentHash = meta?.contentHash || '';
-        safety.startFileWatcher(doc.path);
         await safety.clearRecoverySnapshot();
         try { AddRecentFile(doc.path, doc.name); } catch (e) {}
         const dir = doc.path.substring(0, doc.path.lastIndexOf('/'));
         state.docDir = dir;
-        state.sidebarCollapsed = false;
+        // 保存 / 另存为后保持侧栏当前状态，不再自动展开。
         state.expandedDirs.clear();
-        const container = qs('#file-tree-container');
-        container?.classList.remove('collapsed');
-        applySidebarWidth(state.sidebarWidth);
-        const reopen = qs('#sidebar-reopen');
-        if (reopen) reopen.classList.remove('visible');
         const nav = qs('#file-tree-nav');
         if (nav) nav.innerHTML = '<div class="sidebar-empty">加载中...</div>';
         try {
@@ -3142,18 +3327,10 @@ async function performSave(saveAs = false) {
   if (!state.isDirty) return;
 
   try {
-    state.ignoreWatcherUntil = Date.now() + 1200;
-    const revision = await WriteDocumentVersioned(
-      docSnapshot.path,
-      md,
-      state.currentRevision,
-      state.currentHash,
-    );
-    state.currentRevision = revision;
-    const meta = await ReadDocumentWithMeta(docSnapshot.path);
-    state.currentHash = meta?.contentHash || state.currentHash;
+    await WriteDocument(docSnapshot.path, md);
     if (stillSameDoc()) {
       state.currentContent = md;
+      state.persistedContent = md;
       if (contentUnchanged()) {
         state.isDirty = false;
       } else {
@@ -3165,9 +3342,6 @@ async function performSave(saveAs = false) {
     updateTitleDirty();
   } catch (e) {
     updateTitleDirty();
-    if (String(e?.message || e).includes('revision conflict')) {
-      safety.showExternalChangeDialog({ path: docSnapshot.path });
-    }
     console.error('save error:', e);
   }
 }
@@ -3182,6 +3356,11 @@ function markModelPersisted() {
 }
 
 function updateTitleDirty() {
+  const wasDirty = state.isDirty;
+  syncDirtyState(state);
+  if (wasDirty && !state.isDirty) {
+    void safety.clearRecoverySnapshot();
+  }
   void SetPendingChanges(state.isDirty ? 1 : 0, state.currentDoc?.name || `${t('main.untitled')}.md`);
   const titleEl = qs('#editor-title');
   if (!titleEl) return;
@@ -3189,27 +3368,10 @@ function updateTitleDirty() {
   titleEl.textContent = `${name}.md${state.isDirty ? ' *' : ''}`;
 }
 
-async function applyExternalDocument(meta) {
-  state.currentContent = meta.content || '';
-  state.currentRevision = meta.revision || 0;
-  state.currentHash = meta.contentHash || '';
-  state.isDirty = false;
-  await safety.clearRecoverySnapshot();
-  renderEditor();
-}
-
-async function keepLocalVersion(meta) {
-  state.currentRevision = meta.revision || 0;
-  state.currentHash = meta.contentHash || '';
-  state.isDirty = true;
-  await saveCurrentDoc();
-}
-
 async function restoreDocumentSnapshot(snapshot) {
   state.currentDoc = snapshot.currentDoc || state.currentDoc;
   state.currentContent = snapshot.content || '';
-  state.currentRevision = snapshot.revision || 0;
-  state.currentHash = snapshot.contentHash || '';
+  state.persistedContent = snapshot.persistedContent ?? state.persistedContent ?? '';
   state.isDirty = true;
   renderEditor();
 }
@@ -3221,12 +3383,10 @@ async function deleteCurrentDocument() {
     if (state.currentDoc.path) {
       await DeleteDocument(state.currentDoc.path);
     }
-    safety.stopFileWatcher();
     await safety.clearRecoverySnapshot();
     state.currentDoc = null;
     state.currentContent = '';
-    state.currentRevision = 0;
-    state.currentHash = '';
+    state.persistedContent = '';
     state.isDirty = false;
     await initLibrary();
   } catch (error) {
@@ -3236,12 +3396,10 @@ async function deleteCurrentDocument() {
 
 async function handleTreeDocumentDeleted(path) {
   if (state.currentDoc?.path === path) {
-    safety.stopFileWatcher();
     await safety.clearRecoverySnapshot();
     state.currentDoc = null;
     state.currentContent = '';
-    state.currentRevision = 0;
-    state.currentHash = '';
+    state.persistedContent = '';
     state.selection = null;
     state.selectionIndex = null;
     state.isDirty = false;
@@ -3265,12 +3423,30 @@ async function init() {
   // 关闭守卫必须在恢复流程之前注册，否则恢复文档后提前返回会导致应用无法关闭。
   try {
     EventsOn('app:before-close', async () => {
-      await saveCurrentDoc(false);
+      // 没有未保存的修改：直接关闭，不再弹任何提示。
       if (!state.isDirty) {
         await ConfirmClose();
-      } else {
-        alert('仍有内容未能保存，已取消退出。请检查保存错误后重试。');
+        return;
       }
+      const choice = await safety.confirmUnsavedChanges(
+        state.currentDoc?.name || `${t('main.untitled')}.md`,
+      );
+      if (choice === 'save') {
+        await saveCurrentDoc(false);
+        if (!state.isDirty) {
+          await ConfirmClose();
+        } else {
+          showAppToast('保存未完成，已取消关闭。', { error: true });
+        }
+        return;
+      }
+      if (choice === 'discard') {
+        // 主动丢弃后清掉恢复快照，避免下次启动又被恢复回来。
+        await safety.clearRecoverySnapshot();
+        await ConfirmClose();
+        return;
+      }
+      // 取消：保持窗口打开，下次关闭仍会再次询问。
     });
   } catch (e) {}
 
@@ -3338,7 +3514,7 @@ async function init() {
     }
     if (matchesShortcut(e, getSetting('shortcuts.toggleSidebar', 'Cmd+Shift+B'))) {
       e.preventDefault();
-      setWorkspacePanel(workspacePanel === 'outline' ? 'files' : 'outline');
+      setSidebarView(currentSidebarView === 'outline' ? 'files' : 'outline');
       return;
     }
     if (matchesShortcut(e, getSetting('shortcuts.save', 'Cmd+S'))) {
@@ -3464,12 +3640,7 @@ const safety = createSafetyModule({
   escapeHtml,
   lucideIcons,
   getCurrentMd,
-  onReloadDocument: applyExternalDocument,
-  onKeepLocalVersion: keepLocalVersion,
-  onSaveCopy: () => saveCurrentDoc(true),
   onContentRestored: restoreDocumentSnapshot,
-  onWorkspaceChanged: initLibrary,
-  getWatcherInterval: () => getSetting('files.watcherInterval', 3000),
 });
 
 const settingsModule = createSettingsModule({
@@ -3548,13 +3719,10 @@ pluginRuntime = createAppPluginRuntime({
     listDocuments: NativeListDocuments,
     listDocumentTree: NativeListDocumentTree,
     readDocument: NativeReadDocument,
-    readDocumentWithMeta: NativeReadDocumentWithMeta,
     writeDocument: NativeWriteDocument,
     writeImageAsset: NativeWriteImageAsset,
   },
   documentStoreService: {
-    listFileVersions: NativeListFileVersions,
-    restoreFileVersion: NativeRestoreFileVersion,
     deleteDocument: NativeDeleteDocument,
     listRecycleBin: NativeListRecycleBin,
     restoreRecycleItem: NativeRestoreRecycleItem,

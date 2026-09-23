@@ -6,8 +6,6 @@ export const state = {
   currentDoc: null,
   currentContent: '',
   persistedContent: '',
-  currentRevision: 0,
-  currentHash: '',
   selection: null,
   selectionIndex: null,
   lastCompositionTransaction: null,
@@ -20,6 +18,4 @@ export const state = {
   sidebarWidth: 250,
   sidebarCollapsed: false,
   homeRecentWidth: 330,
-  watcherTimer: null,
-  ignoreWatcherUntil: 0,
 };

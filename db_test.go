@@ -1,79 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
-
-func TestDocumentRevisionsAndRestore(t *testing.T) {
-	db, err := NewDB(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewDB: %v", err)
-	}
-	defer db.Close()
-
-	id, err := db.CreateDoc("note.md", "version one")
-	if err != nil {
-		t.Fatalf("CreateDoc: %v", err)
-	}
-	revision, err := db.UpdateDoc(id, "note.md", "version two", 1)
-	if err != nil {
-		t.Fatalf("UpdateDoc: %v", err)
-	}
-	if revision != 2 {
-		t.Fatalf("revision = %d; want 2", revision)
-	}
-	if _, err := db.UpdateDoc(id, "note.md", "stale write", 1); !errors.Is(err, ErrRevisionConflict) {
-		t.Fatalf("stale update error = %v; want revision conflict", err)
-	}
-
-	versions, err := db.ListDocVersions(id, 10)
-	if err != nil {
-		t.Fatalf("ListDocVersions: %v", err)
-	}
-	if len(versions) != 2 {
-		t.Fatalf("version count = %d; want 2", len(versions))
-	}
-
-	restoredRevision, err := db.RestoreDocVersion(id, versions[1].ID, revision)
-	if err != nil {
-		t.Fatalf("RestoreDocVersion: %v", err)
-	}
-	_, content, currentRevision, err := db.ReadDoc(id)
-	if err != nil {
-		t.Fatalf("ReadDoc: %v", err)
-	}
-	if content != "version one" || currentRevision != restoredRevision {
-		t.Fatalf("restored content/revision = %q/%d; want version one/%d", content, currentRevision, restoredRevision)
-	}
-}
-
-func TestFileRevisionConflict(t *testing.T) {
-	db, err := NewDB(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewDB: %v", err)
-	}
-	defer db.Close()
-
-	first := FileRevision{Revision: 1, ContentHash: contentHash("one")}
-	if _, err := db.EnsureFileRevision("/tmp/note.md", first.ContentHash, "one"); err != nil {
-		t.Fatalf("EnsureFileRevision: %v", err)
-	}
-	if _, err := db.CommitFileRevision("/tmp/note.md", contentHash("two"), "two", 1, first.ContentHash); err != nil {
-		t.Fatalf("CommitFileRevision: %v", err)
-	}
-	if _, err := db.CommitFileRevision(
-		"/tmp/note.md",
-		contentHash("stale"),
-		"stale",
-		1,
-		first.ContentHash,
-	); !errors.Is(err, ErrRevisionConflict) {
-		t.Fatalf("stale file commit error = %v; want revision conflict", err)
-	}
-}
 
 func TestRecycleBinRestore(t *testing.T) {
 	configDir := t.TempDir()
@@ -114,5 +47,50 @@ func TestRecycleBinRestore(t *testing.T) {
 	}
 	if string(data) != "content" {
 		t.Fatalf("restored content = %q; want content", data)
+	}
+}
+
+func TestMigrateDropsRetiredTables(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewDB(dir)
+	if err != nil {
+		t.Fatalf("NewDB: %v", err)
+	}
+	defer db.Close()
+
+	// 模拟旧版本遗留的表与数据
+	seeds := []string{
+		`CREATE TABLE IF NOT EXISTS file_versions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL, revision INTEGER NOT NULL,
+			content TEXT NOT NULL, content_hash TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(path, revision))`,
+		`CREATE TABLE IF NOT EXISTS document_versions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL, revision INTEGER NOT NULL,
+			name TEXT NOT NULL, content TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(document_id, revision))`,
+		`CREATE TABLE IF NOT EXISTS file_revisions (
+			path TEXT PRIMARY KEY, revision INTEGER NOT NULL, content_hash TEXT NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+		`CREATE TABLE IF NOT EXISTS documents (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			revision INTEGER NOT NULL DEFAULT 1, deleted_at DATETIME)`,
+	}
+	for _, seed := range seeds {
+		if _, err := db.conn.Exec(seed); err != nil {
+			t.Fatalf("seed legacy table: %v", err)
+		}
+	}
+	if _, err := db.conn.Exec("DELETE FROM schema_migrations WHERE version IN (3, 4)"); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+	if err := db.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, table := range []string{"file_versions", "document_versions", "file_revisions", "documents"} {
+		var name string
+		if err := db.conn.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", table).Scan(&name); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("retired table %s still present (err=%v)", table, err)
+		}
 	}
 }
