@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.0.3 - 2026-09-23
+
+Editor interaction release: paste, typing, block operations, task lists, and window handling.
+
+### Added
+
+- Block-level Source Peek (`F5`) that shows and edits the raw Markdown of the current block.
+- Clickable GFM task-list checkboxes in the rendered editor: `- [ ]` / `- [x]` toggle on click and stay in sync with the document model.
+- The desktop window remembers its size: the app reopens at the size you last resized it to, with a minimum width of 700px.
+- An editor-core layering gate in `npm test`, so the editor core can no longer import app-layer modules or third-party parsing libraries.
+- Refreshed brand assets, native application icon, and a customised DMG installer layout.
+
+### Changed
+
+- Highlight syntax is unified on `==text==` across the parser, serializer, renderer, and WYSIWYG editing.
+- Rich-text and plain-text pastes now share one deterministic path; the block is re-rendered from the document model afterwards, so pasted tables and lists get editor styling immediately.
+- Table block detection now matches the Markdown parser (header row plus delimiter row), removing the mismatch between the document model and the rendered view.
+- Removed version history and DB-backed document APIs; saving, the recycle bin, and crash recovery were simplified accordingly.
+- Updated application and website version metadata to `0.0.3`.
+
+### Fixed
+
+- Pasting content no longer leaves the editor unresponsive — Enter, the unsaved-change marker, and the word count update again.
+- Fixed characters being inserted out of order when typing inside list, quote, and task-list blocks.
+- Fixed the block editor losing its editable block after merging blocks or undoing, which previously required clicking a block before typing again.
+- Fixed Enter in an empty block, undo-to-empty followed by redo, caret drift after redo, and click-to-activate on a block.
+- Fixed `Cmd+/` shortcuts never matching because the shortcut parser split the key on `/`.
+- Fixed empty containers (`>`, `-`, headings, empty code fences) being dropped when the rendered DOM was converted back to Markdown.
+- Fixed `Alt+↑`/`Alt+↓` block moving skipping over the blank-line separators between blocks.
+
 ## 0.0.2 - 2026-09-21
 
 Browser and desktop workflow release.

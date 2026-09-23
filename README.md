@@ -2,7 +2,7 @@
 
 Markdown Writing is a desktop Markdown editor built with Wails, Go, SQLite, and a vanilla JavaScript frontend.
 
-Current release: `0.0.2`. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+Current release: `0.0.3`. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Features
 
