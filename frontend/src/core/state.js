@@ -5,6 +5,7 @@ export const state = {
   expandedDirs: new Set(),
   currentDoc: null,
   currentContent: '',
+  persistedContent: '',
   currentRevision: 0,
   currentHash: '',
   selection: null,

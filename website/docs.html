@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="了解 Markdown Writing 的保存、冲突处理、版本历史和恢复机制。">
+  <meta name="description" content="了解 Markdown Writing 的保存、删除处理和恢复机制。">
   <meta name="theme-color" content="#eef1ef">
   <link rel="canonical" href="https://smartartian.github.io/Markdown-writing/docs.html">
   <link rel="alternate" hreflang="zh-CN" href="https://smartartian.github.io/Markdown-writing/docs.html?lang=zh-CN">
@@ -16,13 +16,13 @@
   <meta property="og:site_name" content="Markdown Writing">
   <meta property="og:url" content="https://smartartian.github.io/Markdown-writing/docs.html">
   <meta property="og:title" content="数据安全设计 - Markdown Writing">
-  <meta property="og:description" content="了解 Markdown Writing 的保存、冲突处理、版本历史和恢复机制。">
+  <meta property="og:description" content="了解 Markdown Writing 的保存、删除处理和恢复机制。">
   <meta property="og:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <meta property="og:locale" content="zh_CN">
   <meta property="og:locale:alternate" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="数据安全设计 - Markdown Writing">
-  <meta name="twitter:description" content="原子写入、冲突检测、版本历史、回收站和崩溃恢复。">
+  <meta name="twitter:description" content="原子写入、删除留副本和崩溃恢复。">
   <meta name="twitter:image" content="https://smartartian.github.io/Markdown-writing/assets/og-cover.jpg">
   <title>数据安全设计 - Markdown Writing</title>
   <script>document.documentElement.classList.add('js');</script>
@@ -78,7 +78,7 @@
       <div class="section-shell">
         <span class="eyebrow" data-i18n="docs.heroEyebrow">Data safety</span>
         <h1 data-i18n="docs.heroTitle">先保证不丢，再谈功能。</h1>
-        <p data-i18n="docs.heroLead">Markdown Writing 把本地文件视为唯一事实来源。保存、冲突处理、历史恢复和退出保护都围绕这条原则设计。</p>
+        <p data-i18n="docs.heroLead">Markdown Writing 把本地文件视为唯一事实来源。保存、退出保护和恢复都围绕这条原则设计。</p>
       </div>
     </section>
 
@@ -87,8 +87,7 @@
         <strong data-i18n="docs.sidebarTitle">安全设计</strong>
         <a href="#principles" data-i18n="docs.nav.principles">设计原则</a>
         <a href="#save-flow" data-i18n="docs.nav.save">保存流程</a>
-        <a href="#conflicts" data-i18n="docs.nav.conflicts">外部冲突</a>
-        <a href="#history" data-i18n="docs.nav.history">历史与回收站</a>
+        <a href="#recycle" data-i18n="docs.nav.recycle">删除与恢复</a>
         <a href="#recovery" data-i18n="docs.nav.recovery">退出与恢复</a>
         <a href="#boundaries" data-i18n="docs.nav.boundaries">能力边界</a>
       </aside>
@@ -96,12 +95,10 @@
       <article class="docs-content">
         <section class="docs-section" id="principles">
           <h2 data-i18n="docs.principles.title">设计原则</h2>
-          <p data-i18n="docs.principles.body">编辑器的第一责任不是让界面显得智能，而是在异常、误操作和多窗口竞争发生时，尽量不让用户失去已经写下的内容。</p>
+          <p data-i18n="docs.principles.body">编辑器的第一责任不是让界面显得智能，而是在异常和误操作发生时，尽量不让用户失去已经写下的内容。</p>
           <ul>
             <li data-i18n="docs.principles.item1">本地优先：普通 Markdown 文件保留在磁盘，应用不会把文档锁进私有格式。</li>
-            <li data-i18n="docs.principles.item2">写入可验证：每次保存都携带 revision 和内容哈希，版本不一致时停止覆盖。</li>
-            <li data-i18n="docs.principles.item3">恢复优先于报错：冲突、崩溃和误删除都提供可执行的恢复路径。</li>
-            <li data-i18n="docs.principles.item4">用户保留决定权：外部修改时，可以重新载入、保留本地版本或另存副本。</li>
+            <li data-i18n="docs.principles.item3">恢复优先于报错：异常退出和误删除都尽量提供可执行的恢复路径。</li>
           </ul>
         </section>
 
@@ -112,29 +109,22 @@
             <div class="docs-flow-step">
               <span>01</span>
               <div>
-                <strong data-i18n="docs.save.step1.title">校验当前版本</strong>
-                <p data-i18n="docs.save.step1.body">提交时携带 revision 与内容哈希，确认应用读取的版本仍是磁盘上的当前版本。</p>
+                <strong data-i18n="docs.save.step1.title">写入临时文件</strong>
+                <p data-i18n="docs.save.step1.body">新内容先写到目标目录中的临时文件，避免原文件在写入中被截断。</p>
               </div>
             </div>
             <div class="docs-flow-step">
               <span>02</span>
               <div>
-                <strong data-i18n="docs.save.step2.title">写入临时文件</strong>
-                <p data-i18n="docs.save.step2.body">新内容先写到目标目录中的临时文件，避免原文件在写入中被截断。</p>
+                <strong data-i18n="docs.save.step2.title">原子替换原文件</strong>
+                <p data-i18n="docs.save.step2.body">内容完整写入后替换原文件，再做必要的清理。</p>
               </div>
             </div>
             <div class="docs-flow-step">
               <span>03</span>
               <div>
-                <strong data-i18n="docs.save.step3.title">原子替换原文件</strong>
-                <p data-i18n="docs.save.step3.body">内容完整写入后替换原文件，再做必要的清理。</p>
-              </div>
-            </div>
-            <div class="docs-flow-step">
-              <span>04</span>
-              <div>
-                <strong data-i18n="docs.save.step4.title">记录版本与恢复状态</strong>
-                <p data-i18n="docs.save.step4.body">保存成功后更新 revision、写入历史快照，并清理已经落盘的恢复内容。</p>
+                <strong data-i18n="docs.save.step3.title">清理恢复状态</strong>
+                <p data-i18n="docs.save.step3.body">保存成功后清理已经落盘的恢复内容。</p>
               </div>
             </div>
           </div>
@@ -144,43 +134,28 @@
           </div>
         </section>
 
-        <section class="docs-section" id="conflicts">
-          <h2 data-i18n="docs.conflicts.title">外部修改与冲突处理</h2>
-          <p data-i18n="docs.conflicts.body">应用会检查当前文件的内容哈希和 revision。文件被其他编辑器修改、删除或重命名后，页面会明确说明冲突，而不是继续静默自动保存。</p>
-          <ol>
-            <li data-i18n="docs.conflicts.item1">重新载入：放弃本地未保存版本，读取磁盘上的最新内容。</li>
-            <li data-i18n="docs.conflicts.item2">保留本地并覆盖：在确认磁盘版本后，用应用中的内容重新提交。</li>
-            <li data-i18n="docs.conflicts.item3">另存副本：把当前内容保存到新路径，保留双方版本。</li>
-          </ol>
-        </section>
-
-        <section class="docs-section" id="history">
-          <h2 data-i18n="docs.history.title">历史与回收站</h2>
-          <p data-i18n="docs.history.body">版本历史保存最近 50 个自动保存快照。恢复历史版本同样需要提供当前 revision，避免覆盖另一个窗口刚完成的保存。</p>
+        <section class="docs-section" id="recycle">
+          <h2 data-i18n="docs.recycle.title">删除与恢复</h2>
+          <p data-i18n="docs.recycle.body">删除文档时文件会先移动到应用数据目录而不是立即抹除，但应用内暂不提供恢复入口；磁盘文件消失时仍可保留编辑内容并另存副本。</p>
           <div class="docs-table-wrap">
             <table class="docs-table">
               <thead>
                 <tr>
-                  <th data-i18n="docs.history.scenario">场景</th>
-                  <th data-i18n="docs.history.action">保护动作</th>
-                  <th data-i18n="docs.history.entry">恢复入口</th>
+                  <th data-i18n="docs.recycle.scenario">场景</th>
+                  <th data-i18n="docs.recycle.action">保护动作</th>
+                  <th data-i18n="docs.recycle.entry">应用内入口</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td data-i18n="docs.history.row1">误覆盖内容</td>
-                  <td data-i18n="docs.history.row1Action">保存前生成历史快照</td>
-                  <td data-i18n="docs.history.row1Entry">版本历史中恢复</td>
+                  <td data-i18n="docs.recycle.row1">误删除文档</td>
+                  <td data-i18n="docs.recycle.row1Action">文件先移动到应用数据目录</td>
+                  <td data-i18n="docs.recycle.row1Entry">暂不提供</td>
                 </tr>
                 <tr>
-                  <td data-i18n="docs.history.row2">误删除文档</td>
-                  <td data-i18n="docs.history.row2Action">文件先移动到应用回收站</td>
-                  <td data-i18n="docs.history.row2Entry">恢复到原路径</td>
-                </tr>
-                <tr>
-                  <td data-i18n="docs.history.row3">外部文件消失</td>
-                  <td data-i18n="docs.history.row3Action">保留编辑内容与恢复快照</td>
-                  <td data-i18n="docs.history.row3Entry">重新载入或另存副本</td>
+                  <td data-i18n="docs.recycle.row2">外部文件消失</td>
+                  <td data-i18n="docs.recycle.row2Action">保留编辑内容</td>
+                  <td data-i18n="docs.recycle.row2Entry">另存副本</td>
                 </tr>
               </tbody>
             </table>
@@ -190,19 +165,15 @@
         <section class="docs-section" id="recovery">
           <h2 data-i18n="docs.recovery.title">退出与崩溃恢复</h2>
           <p data-i18n="docs.recovery.body1">存在未保存内容时，退出流程会先尝试完成保存，并列出仍未落盘的文档。正常关闭后清理恢复状态，异常退出则保留下一次启动可读取的快照。</p>
-          <p data-i18n="docs.recovery.body2">恢复快照包含文档、内容、revision、内容哈希、编辑模型版本和最后事务编号。启动时若发现未处理快照，会询问恢复还是丢弃。</p>
-          <div class="docs-callout">
-            <strong data-i18n="docs.recovery.calloutTitle">恢复也有版本边界</strong>
-            <p data-i18n="docs.recovery.calloutBody">恢复内容仍需经过当前文档版本校验。如果磁盘文件已经变化，应用会进入冲突处理流程。</p>
-          </div>
+          <p data-i18n="docs.recovery.body2">恢复快照包含文档、内容和编辑模型版本。启动时若发现未处理快照，会询问恢复还是丢弃。</p>
         </section>
 
         <section class="docs-section" id="boundaries">
           <h2 data-i18n="docs.boundaries.title">能力边界</h2>
-          <p data-i18n="docs.boundaries.body">这些机制主要防止正常使用中的误覆盖、进程中断和文件竞争，不能替代系统备份或磁盘加密。</p>
+          <p data-i18n="docs.boundaries.body">这些机制主要防止正常使用中的误操作和进程中断，不能替代系统备份或磁盘加密。</p>
           <ul>
             <li data-i18n="docs.boundaries.item1">应用不会把文档上传到云端，网络只用于读取 GitHub Releases 等明确功能。</li>
-            <li data-i18n="docs.boundaries.item2">应用数据目录包含历史版本和回收站元数据，应纳入系统备份。</li>
+            <li data-i18n="docs.boundaries.item2">应用数据目录保存被删除文件的副本与元数据，应纳入系统备份。</li>
             <li data-i18n="docs.boundaries.item3">如果磁盘损坏、权限被拒绝或系统工具直接改写文件，应用会尽量保留恢复副本，但无法保证物理介质本身可恢复。</li>
             <li data-i18n="docs.boundaries.item4">涉及敏感内容时，应配合加密磁盘、文件权限和可信备份策略使用。</li>
           </ul>

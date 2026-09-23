@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { htmlToMarkdown } from '../wysiwyg.js';
+import { htmlToMarkdown, renderedHtmlToMarkdown } from "../wysiwyg.js";
 
 test('wysiwyg converts rendered block HTML back to Markdown', async () => {
   const markdown = await htmlToMarkdown('<h2>Title</h2><p><strong>Bold</strong> and <em>italic</em></p>');
@@ -20,4 +20,18 @@ test('wysiwyg writes compact unordered and ordered list markers', async () => {
 
   assert.equal(unordered, '- 项目三');
   assert.equal(ordered, '1. 第一步');
+});
+
+test("wysiwyg keeps plain pasted text unchanged and preserves line breaks", async () => {
+  const source = 'Paste _text_ and *markers*\nSecond line';
+  const markdown = await renderedHtmlToMarkdown(
+    '<p>Paste _text_ and *markers*<br>Second line<br></p>',
+    source,
+  );
+  assert.equal(markdown, source);
+});
+
+test('wysiwyg still converts rich rendered markup to Markdown', async () => {
+  const markdown = await renderedHtmlToMarkdown('<p><strong>Bold</strong> text</p>', 'Bold text');
+  assert.equal(markdown, await htmlToMarkdown('<p><strong>Bold</strong> text</p>'));
 });

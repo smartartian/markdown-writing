@@ -65,9 +65,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           DMG_NAME="Markdown Writing-${VERSION}-macos-arm64.dmg"
-          hdiutil create -volname "Markdown Writing" \
-            -srcfolder "build/bin/Markdown Writing.app" \
-            -ov -format UDZO "build/bin/${DMG_NAME}"
+          OUTPUT_DMG="build/bin/${DMG_NAME}" \
+          VOLUME_NAME="Markdown Writing" \
+            ./build/create-installer-dmg.sh
           shasum -a 256 "build/bin/${DMG_NAME}" > "build/bin/${DMG_NAME}.sha256"
       - uses: actions/upload-artifact@v4
         with:

@@ -19,6 +19,19 @@ The directory contains the following files:
 
 - `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
 - `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
+- `create-installer-dmg.sh` - creates the drag-to-Applications DMG used by
+  the release workflow.
+- `installer-background.svg` - editable source for the installer background.
+- `installer-background.png` - the Finder background used by the DMG.
+
+After building the macOS app, create an installer with:
+
+```sh
+./build/create-installer-dmg.sh
+```
+
+The script writes `build/bin/Markdown Writing-Installer.dmg`. Override
+`OUTPUT_DMG` and `VOLUME_NAME` when a release needs specific names.
 
 ## Windows
 

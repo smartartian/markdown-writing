@@ -78,7 +78,7 @@ const PREVIEW_DOCUMENTS = {
   },
 };
 
-const SCENARIOS = ['open', 'write', 'conflict', 'history', 'export'];
+const SCENARIOS = ['open', 'write', 'export'];
 
 let activeTheme = 'paper';
 let activeMode = 'light';
@@ -228,12 +228,6 @@ function showPreviewToast(message) {
   }, 2600);
 }
 
-function resolveConflict(action) {
-  const conflict = document.querySelector('#preview-conflict');
-  if (conflict) conflict.hidden = true;
-  showPreviewToast(t(action === 'reload' ? 'preview.toast.reload' : 'preview.toast.keep'));
-}
-
 function selectScenario(name) {
   if (!SCENARIOS.includes(name)) return;
   activeScenario = name;
@@ -248,11 +242,6 @@ function runScenario(name, { notify = true } = {}) {
   if (!SCENARIOS.includes(name)) return;
   selectScenario(name);
 
-  if (name !== 'conflict') {
-    const conflict = document.querySelector('#preview-conflict');
-    if (conflict) conflict.hidden = true;
-  }
-
   if (name === 'open') {
     closePreviewOverlays();
     setPreviewPanel('files');
@@ -264,13 +253,6 @@ function runScenario(name, { notify = true } = {}) {
     setPreviewDocument('plan');
     if (notify) showPreviewToast(t('preview.toast.writing'));
   }
-  if (name === 'conflict') {
-    closePreviewOverlays();
-    const conflict = document.querySelector('#preview-conflict');
-    if (conflict) conflict.hidden = false;
-    if (notify) showPreviewToast(t('preview.toast.conflict'));
-  }
-  if (name === 'history') openPreviewDrawer('preview-history-drawer', notify ? 'preview.toast.history' : '');
   if (name === 'export') {
     closePreviewOverlays();
     const menu = document.querySelector('#preview-export-menu');
@@ -394,7 +376,6 @@ function initInteractivePreview() {
     button.addEventListener('click', () => {
       const action = button.dataset.previewAction;
       if (action === 'find') setFindPanel({ open: true });
-      if (action === 'history') openPreviewDrawer('preview-history-drawer', 'preview.toast.history');
       if (action === 'settings') openPreviewDrawer('preview-settings-drawer', 'preview.toast.settings');
       if (action === 'export') {
         closePreviewOverlays();
@@ -409,24 +390,12 @@ function initInteractivePreview() {
   document.querySelectorAll('[data-settings-tab]').forEach(button => {
     button.addEventListener('click', () => setSettingsTab(button.dataset.settingsTab));
   });
-  document.querySelectorAll('[data-restore-version]').forEach(button => {
-    button.addEventListener('click', () => {
-      const version = button.dataset.restoreVersion;
-      document.querySelectorAll('.preview-version').forEach(item => {
-        item.classList.toggle('active', item.contains(button));
-      });
-      showPreviewToast(t('preview.toast.restored', { version }));
-    });
-  });
   document.querySelectorAll('[data-export-format]').forEach(button => {
     button.addEventListener('click', () => {
       const format = button.querySelector('small')?.textContent || button.dataset.exportFormat;
       closePreviewOverlays({ keepFind: true });
       showPreviewToast(t('preview.toast.exported', { format }));
     });
-  });
-  document.querySelectorAll('[data-conflict-action]').forEach(button => {
-    button.addEventListener('click', () => resolveConflict(button.dataset.conflictAction));
   });
   document.querySelectorAll('[data-preview-find]').forEach(button => {
     button.addEventListener('click', () => {
@@ -474,8 +443,6 @@ function initKeyboardShortcuts() {
     }
     if (event.key === 'Escape') {
       closePreviewOverlays();
-      const conflict = document.querySelector('#preview-conflict');
-      if (conflict) conflict.hidden = true;
     }
   });
 }

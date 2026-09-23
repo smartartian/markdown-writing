@@ -11,6 +11,17 @@ import {
   themeDescription,
   themeDisplayName,
 } from '../themes/index.js';
+import {
+  APPLICATION_ICON_CONTENT_RATIO,
+  DEFAULT_LOGO_ID,
+  getApplicationIconDrawRect,
+  getApplicationIconScale,
+  getLogoOption,
+  getLogoUrl,
+  LOGO_OPTIONS,
+  LOGO_TILE_CORNER_RATIO,
+  normalizeApplicationIconContentRatio,
+} from '../ui/brand.js';
 
 const FONT_FAMILIES = [
   { labelKey: 'font.lxgw', value: "'LXGW WenKai', 'PingFang SC', 'Songti SC', serif" },
@@ -107,6 +118,7 @@ const DEFAULT_SETTINGS = {
     fontSize: 18,
     lineHeight: 1.8,
     contentWidth: 70,
+    logo: DEFAULT_LOGO_ID,
     density: 'comfortable',
     reducedMotion: false,
   },
@@ -123,16 +135,12 @@ const DEFAULT_SETTINGS = {
   },
   files: {
     imageDir: 'assets',
-    imageWidth: 100,
-    watcherInterval: 3000,
     recentLimit: 15,
     defaultExport: 'md',
   },
   recovery: {
     enabled: true,
     snapshotLimit: 50,
-    versionLimit: 50,
-    recycleRetentionDays: 30,
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
   update: {
@@ -191,6 +199,14 @@ function optionHtml(options, selected) {
   `).join('');
 }
 
+// 设置项搜索：空格分隔的多个关键词需要全部命中（忽略大小写）。
+export function matchesSettingsQuery(text, query) {
+  const tokens = String(query || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const haystack = String(text || '').toLowerCase();
+  return tokens.every(token => haystack.includes(token));
+}
+
 function escapeAttribute(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -199,12 +215,28 @@ function escapeAttribute(value) {
     .replace(/>/g, '&gt;');
 }
 
+function infoHint(description, label = '') {
+  const text = String(description || '').trim();
+  if (!text) return '';
+  const accessibleLabel = label ? `${t('settings.infoHint')}: ${label}` : t('settings.infoHint');
+  return `
+    <button class="settings-info-hint" type="button"
+      data-tooltip="${escapeAttribute(text)}"
+      aria-label="${escapeAttribute(accessibleLabel)}"
+      aria-describedby="settings-info-tooltip">
+      <svg data-lucide="circle-alert" width="14" height="14" stroke="currentColor" fill="none" stroke-width="1.8"></svg>
+    </button>
+  `;
+}
+
 function settingRow({ label, description, control, search = '' }) {
   return `
     <div class="settings-row" data-search="${escapeAttribute(`${label} ${description || ''} ${search}`.toLowerCase())}">
       <div class="settings-row-info">
-        <span class="settings-row-label">${escapeAttribute(label)}</span>
-        ${description ? `<span class="settings-row-desc">${escapeAttribute(description)}</span>` : ''}
+        <span class="settings-row-label">
+          ${escapeAttribute(label)}
+          ${infoHint(description, label)}
+        </span>
       </div>
       <div class="settings-row-control">${control}</div>
     </div>
@@ -215,8 +247,10 @@ function sectionHtml(title, description, content) {
   return `
     <section class="settings-section">
       <div class="settings-section-head">
-        <div class="settings-section-title">${escapeAttribute(title)}</div>
-        ${description ? `<div class="settings-section-desc">${escapeAttribute(description)}</div>` : ''}
+        <div class="settings-section-title">
+          ${escapeAttribute(title)}
+          ${infoHint(description, title)}
+        </div>
       </div>
       <div class="settings-section-body">${content}</div>
     </section>
@@ -228,8 +262,10 @@ function settingsPageHeader(kicker, title, description, action = '') {
     <header class="settings-page-intro">
       <div class="settings-page-copy">
         <span class="settings-page-kicker">${escapeAttribute(kicker)}</span>
-        <h1>${escapeAttribute(title)}</h1>
-        <p>${escapeAttribute(description)}</p>
+        <h1>
+          ${escapeAttribute(title)}
+          ${infoHint(description, title)}
+        </h1>
       </div>
       ${action ? `<div class="settings-page-action">${action}</div>` : ''}
     </header>
@@ -315,6 +351,8 @@ export function createSettingsModule({
   let pluginRuntime = null;
   let themeRegistry = createThemeRegistry();
   let themeVariantTarget = 'light';
+  let appliedLogoID = '';
+  let applicationIconRequestID = 0;
 
   function migrateAppearanceSettings(settings, stored) {
     const next = mergeSettings(settings);
@@ -380,6 +418,155 @@ export function createSettingsModule({
     return currentSettings;
   }
 
+  function loadLogoImage(src) {
+    return new Promise((resolve, reject) => {
+      const element = new Image();
+      element.addEventListener('load', () => resolve(element), { once: true });
+      element.addEventListener('error', () => reject(new Error('failed to read application icon')), { once: true });
+      element.src = src;
+    });
+  }
+
+  // logo 的底色方块铺满画布，取几条边中点的颜色平均值即可代表底色。
+  function readLogoBackgroundColor(context, width, height) {
+    const probes = [
+      [Math.round(width / 2), Math.round(height * 0.02)],
+      [Math.round(width * 0.02), Math.round(height / 2)],
+      [Math.round(width * 0.98), Math.round(height / 2)],
+      [Math.round(width / 2), Math.round(height * 0.98)],
+    ];
+    const total = { r: 0, g: 0, b: 0 };
+    probes.forEach(([x, y]) => {
+      const data = context.getImageData(x, y, 1, 1).data;
+      total.r += data[0];
+      total.g += data[1];
+      total.b += data[2];
+    });
+    const count = probes.length;
+    return `rgb(${Math.round(total.r / count)}, ${Math.round(total.g / count)}, ${Math.round(total.b / count)})`;
+  }
+
+  function fillLogoBackground(context, x, y, width, height, radius, color) {
+    const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+    context.beginPath();
+    context.moveTo(x + r, y);
+    context.lineTo(x + width - r, y);
+    context.arcTo(x + width, y, x + width, y + r, r);
+    context.lineTo(x + width, y + height - r);
+    context.arcTo(x + width, y + height, x + width - r, y + height, r);
+    context.lineTo(x + r, y + height);
+    context.arcTo(x, y + height, x, y + height - r, r);
+    context.lineTo(x, y + r);
+    context.arcTo(x, y, x + r, y, r);
+    context.closePath();
+    context.fillStyle = color;
+    context.fill();
+  }
+
+  // 缩进比例由运行环境按系统版本给出（macOS 26 及以后 ≈0.8，旧系统 1），会话内只解析一次。
+  let applicationIconContentRatioPromise = null;
+
+  function resolveApplicationIconContentRatio() {
+    if (!applicationIconContentRatioPromise) {
+      applicationIconContentRatioPromise = (async () => {
+        if (storage.name !== 'wails' || typeof storage.getApplicationIconContentRatio !== 'function') {
+          return APPLICATION_ICON_CONTENT_RATIO;
+        }
+        try {
+          return normalizeApplicationIconContentRatio(await storage.getApplicationIconContentRatio());
+        } catch (error) {
+          console.warn('Failed to resolve application icon content ratio:', error);
+          return APPLICATION_ICON_CONTENT_RATIO;
+        }
+      })();
+    }
+    return applicationIconContentRatioPromise;
+  }
+
+  // 应用图标要和打包图标一样大：底色方块按系统缩进比例铺开（沿用 logo 的圆角），图形缩到打包比例。
+  async function imageUrlToApplicationIconDataUrl(url) {
+    const contentRatio = await resolveApplicationIconContentRatio();
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`failed to load application icon: ${response.status}`);
+    const blob = await response.blob();
+    const objectURL = URL.createObjectURL(blob);
+    try {
+      const image = await loadLogoImage(objectURL);
+      const imageWidth = image.naturalWidth || image.width;
+      const imageHeight = image.naturalHeight || image.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = imageWidth;
+      canvas.height = imageHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('failed to create application icon canvas');
+      context.clearRect(0, 0, imageWidth, imageHeight);
+      context.drawImage(image, 0, 0, imageWidth, imageHeight);
+      const backgroundColor = readLogoBackgroundColor(context, imageWidth, imageHeight);
+      context.clearRect(0, 0, imageWidth, imageHeight);
+      // 底色方块铺进内容区（新系统占画布约 80%；旧系统满幅），再在里面画缩进后的图形。
+      const tileSide = Math.min(imageWidth, imageHeight) * contentRatio;
+      fillLogoBackground(
+        context,
+        (imageWidth - tileSide) / 2,
+        (imageHeight - tileSide) / 2,
+        tileSide,
+        tileSide,
+        tileSide * LOGO_TILE_CORNER_RATIO,
+        backgroundColor,
+      );
+      const drawRect = getApplicationIconDrawRect(
+        imageWidth,
+        imageHeight,
+        imageWidth,
+        imageHeight,
+        getApplicationIconScale(contentRatio),
+      );
+      context.drawImage(image, drawRect.x, drawRect.y, drawRect.width, drawRect.height);
+      return canvas.toDataURL('image/png');
+    } finally {
+      URL.revokeObjectURL(objectURL);
+    }
+  }
+
+  // 同一个 logo 的图标只合成一次，选择器缩略图和应用图标共用结果。
+  const applicationIconCache = new Map();
+
+  function logoApplicationIconDataUrl(logoID) {
+    const logo = getLogoOption(logoID);
+    if (!applicationIconCache.has(logo.id)) {
+      const pending = imageUrlToApplicationIconDataUrl(logo.src).catch(error => {
+        applicationIconCache.delete(logo.id);
+        throw error;
+      });
+      applicationIconCache.set(logo.id, pending);
+    }
+    return applicationIconCache.get(logo.id);
+  }
+
+  function applyLogo(logoID) {
+    const logo = getLogoOption(logoID);
+    currentSettings.appearance.logo = logo.id;
+    const favicon = document.querySelector('link[rel="icon"]');
+    if (favicon) {
+      favicon.href = logo.src;
+      void logoApplicationIconDataUrl(logo.id)
+        .then(dataURL => {
+          if (favicon.isConnected) favicon.href = dataURL;
+        })
+        .catch(() => {});
+    }
+    if (appliedLogoID === logo.id) return;
+    if (storage.name !== 'wails' || typeof storage.setApplicationIcon !== 'function') return;
+    const requestID = ++applicationIconRequestID;
+    void logoApplicationIconDataUrl(logo.id)
+      .then(async dataURL => {
+        const result = await storage.setApplicationIcon(dataURL);
+        if (result === false) throw new Error('application icon update was rejected');
+        if (requestID === applicationIconRequestID) appliedLogoID = logo.id;
+      })
+      .catch(error => console.warn('Failed to update application icon:', error));
+  }
+
   async function saveSettings(settings) {
     currentSettings = mergeSettings(settings);
     const serialized = JSON.stringify(currentSettings);
@@ -404,6 +591,7 @@ export function createSettingsModule({
   function applySettings(settings = currentSettings) {
     currentSettings = mergeSettings(settings);
     const appearance = currentSettings.appearance;
+    applyLogo(appearance.logo);
     const previousLanguage = getLanguage();
     const language = applyLanguage(currentSettings.language);
     const html = document.documentElement;
@@ -491,6 +679,23 @@ export function createSettingsModule({
           ${optionHtml(options, value)}
         </select>
         <svg class="settings-select-arrow" data-lucide="chevron-down" width="14" height="14"></svg>
+      </div>
+    `;
+  }
+
+  function logoPicker(value) {
+    const selected = getLogoOption(value);
+    return `
+      <div class="settings-logo-picker" role="radiogroup" aria-label="${escapeAttribute(t('settings.brand.title'))}">
+        ${LOGO_OPTIONS.map(option => `
+          <button class="settings-logo-option ${option.id === selected.id ? 'active' : ''}"
+            type="button" role="radio" aria-checked="${String(option.id === selected.id)}"
+            data-logo-id="${escapeAttribute(option.id)}"
+            title="${escapeAttribute(t(option.labelKey))}">
+            <img src="${option.src}" data-logo-thumbnail="${escapeAttribute(option.id)}" alt="">
+            <span>${escapeAttribute(t(option.labelKey))}</span>
+          </button>
+        `).join('')}
       </div>
     `;
   }
@@ -687,8 +892,10 @@ export function createSettingsModule({
       <section class="theme-workbench">
         <header class="theme-workbench-head">
           <div>
-            <span class="settings-section-title">${t('settings.theme.workbench.title')}</span>
-            <p>${t('settings.theme.workbench.desc')}</p>
+            <span class="settings-section-title">
+              ${t('settings.theme.workbench.title')}
+              ${infoHint(t('settings.theme.workbench.desc'), t('settings.theme.workbench.title'))}
+            </span>
           </div>
           <div class="theme-mode-control">
             <span>${t('settings.theme.mode.title')}</span>
@@ -701,10 +908,15 @@ export function createSettingsModule({
           <div class="theme-style-area">
             <div class="theme-style-head">
               <div>
-                <span>${t('settings.theme.style.title')}</span>
-                <p>${t(activeVariant === 'light'
-                  ? 'settings.theme.lightThemes.desc'
-                  : 'settings.theme.darkThemes.desc')}</p>
+                <span>
+                  ${t('settings.theme.style.title')}
+                  ${infoHint(
+                    t(activeVariant === 'light'
+                      ? 'settings.theme.lightThemes.desc'
+                      : 'settings.theme.darkThemes.desc'),
+                    t('settings.theme.style.title'),
+                  )}
+                </span>
               </div>
               ${settings.appearance.themeMode === 'system' ? renderThemeVariantTabs(activeVariant) : ''}
             </div>
@@ -795,6 +1007,11 @@ export function createSettingsModule({
           t('settings.appearance.title'),
           t('settings.appearance.desc'),
         )}
+        ${sectionHtml(t('settings.brand.title'), t('settings.brand.desc'), `
+          <div class="settings-row settings-logo-row" data-search="logo icon dock 图标 应用">
+            <div class="settings-row-control">${logoPicker(settings.appearance.logo)}</div>
+          </div>
+        `)}
         ${renderThemeWorkbench(settings)}
         ${sectionHtml(t('settings.typography.title'), t('settings.typography.desc'), `
         ${settingRow({
@@ -849,12 +1066,6 @@ export function createSettingsModule({
           description: t('settings.localFiles.imageDirDesc'),
           control: textControl('files.imageDir', settings.files.imageDir, 'assets'),
         })}
-        ${settingRow({
-          label: t('settings.localFiles.imageWidth'),
-          description: t('settings.localFiles.imageWidthDesc'),
-          control: rangeControl('files.imageWidth', settings.files.imageWidth, 10, 100, 5, '%'),
-          search: 'image width 图片 宽度',
-        })}
       `)}
       ${sectionHtml(t('settings.update.title'), t('settings.update.desc'), `
         ${settingRow({ label: t('settings.update.version'), description: appVersion, control: '' })}
@@ -898,23 +1109,33 @@ export function createSettingsModule({
               <i>/</i>
               <strong>${t('settings.title')}</strong>
             </div>
-            <nav class="settings-header-tabs" aria-label="${escapeAttribute(t('settings.title'))}">
-              ${CATEGORIES.map(category => `
-                <button class="settings-tab ${category.key === activeCategory ? 'active' : ''}"
-                  data-tab="${category.key}" type="button" title="${escapeAttribute(t(category.descriptionKey))}">
-                  <span class="settings-tab-icon">
-                    <svg data-lucide="${category.icon}" width="14" height="14"></svg>
-                  </span>
-                  <span class="settings-tab-label">${t(category.labelKey)}</span>
-                </button>
-              `).join('')}
-            </nav>
           </div>
           <span class="settings-save-status" id="settings-save-status">
             <span class="settings-save-dot"></span>${t('common.saved')}
           </span>
         </header>
         <div class="settings-body">
+          <header class="settings-sidebar">
+            <nav class="settings-sidebar-nav" aria-label="${escapeAttribute(t('settings.title'))}">
+              ${CATEGORIES.map(category => `
+                <button class="settings-tab ${category.key === activeCategory ? 'active' : ''}"
+                  data-tab="${category.key}" type="button">
+                  <span class="settings-tab-icon">
+                    <svg data-lucide="${category.icon}" width="16" height="16"></svg>
+                  </span>
+                  <span class="settings-tab-label">${t(category.labelKey)}</span>
+                </button>
+              `).join('')}
+            </nav>
+            <label class="settings-sidebar-search">
+              <svg data-lucide="search" width="14" height="14"></svg>
+              <input type="search" id="settings-search-input" data-settings-search value=""
+                placeholder="${escapeAttribute(t('settings.search.placeholder'))}"
+                aria-label="${escapeAttribute(t('settings.search.placeholder'))}"
+                autocomplete="off" autocapitalize="off" spellcheck="false">
+            </label>
+            <p class="settings-sidebar-empty" id="settings-sidebar-empty" hidden>${t('settings.search.empty', { query: '' })}</p>
+          </header>
           <main class="settings-content" id="settings-content"></main>
         </div>
         <div class="settings-toast-host" id="settings-toast-host" aria-live="polite"></div>
@@ -924,6 +1145,9 @@ export function createSettingsModule({
     const content = app.querySelector('#settings-content');
     const status = app.querySelector('#settings-save-status');
     const toastHost = app.querySelector('#settings-toast-host');
+    const searchInput = app.querySelector('#settings-search-input');
+    const sidebarEmpty = app.querySelector('#settings-sidebar-empty');
+    let settingsQuery = '';
     let toastTimer = 0;
     let cancelShortcutCapture = null;
     const showToast = (message, link) => {
@@ -944,6 +1168,71 @@ export function createSettingsModule({
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { toastHost.innerHTML = ''; }, 4000);
     };
+    const infoTooltip = document.createElement('div');
+    infoTooltip.id = 'settings-info-tooltip';
+    infoTooltip.className = 'settings-info-tooltip';
+    infoTooltip.setAttribute('role', 'tooltip');
+    document.body.appendChild(infoTooltip);
+    let infoTooltipTimer = 0;
+    let activeInfoHint = null;
+
+    const hideInfoHint = () => {
+      clearTimeout(infoTooltipTimer);
+      infoTooltipTimer = 0;
+      activeInfoHint = null;
+      infoTooltip.classList.remove('visible');
+    };
+
+    const positionInfoHint = trigger => {
+      const triggerRect = trigger.getBoundingClientRect();
+      const tooltipRect = infoTooltip.getBoundingClientRect();
+      const margin = 12;
+      const gap = 8;
+      let left = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
+      let top = triggerRect.bottom + gap;
+      if (top + tooltipRect.height > window.innerHeight - margin) {
+        top = triggerRect.top - tooltipRect.height - gap;
+      }
+      infoTooltip.style.left = `${Math.round(left)}px`;
+      infoTooltip.style.top = `${Math.round(Math.max(margin, top))}px`;
+    };
+
+    const showInfoHint = trigger => {
+      const text = String(trigger?.dataset.tooltip || '').trim();
+      if (!text) return;
+      clearTimeout(infoTooltipTimer);
+      activeInfoHint = trigger;
+      infoTooltip.textContent = text;
+      infoTooltip.classList.add('visible');
+      positionInfoHint(trigger);
+    };
+
+    const scheduleInfoHint = trigger => {
+      clearTimeout(infoTooltipTimer);
+      infoTooltipTimer = window.setTimeout(() => showInfoHint(trigger), 180);
+    };
+
+    app.addEventListener('pointerover', event => {
+      const trigger = event.target.closest?.('.settings-info-hint');
+      if (!trigger || trigger.contains(event.relatedTarget)) return;
+      scheduleInfoHint(trigger);
+    }, { signal: eventController.signal });
+    app.addEventListener('pointerout', event => {
+      const trigger = event.target.closest?.('.settings-info-hint');
+      if (!trigger || trigger.contains(event.relatedTarget)) return;
+      hideInfoHint();
+    }, { signal: eventController.signal });
+    app.addEventListener('focusin', event => {
+      const trigger = event.target.closest?.('.settings-info-hint');
+      if (trigger) showInfoHint(trigger);
+    }, { signal: eventController.signal });
+    app.addEventListener('focusout', event => {
+      if (event.target.closest?.('.settings-info-hint')) hideInfoHint();
+    }, { signal: eventController.signal });
+    app.addEventListener('scroll', hideInfoHint, { capture: true, signal: eventController.signal });
+    window.addEventListener('resize', hideInfoHint, { signal: eventController.signal });
+
     const installPluginFromFile = ({ upgrade = false } = {}) => new Promise(resolve => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -978,7 +1267,93 @@ export function createSettingsModule({
       document.body.appendChild(input);
       input.click();
     });
+    // 每个分类的搜索语料：分类名 + 该分类下所有设置行的 data-search + 分组标题。
+    // 离线渲染一次并缓存，避免为了搜索把全部分类都塞进 DOM。
+    let categorySearchIndex = null;
+    let searchEmptyContent = false;
+    const categorySearchText = () => {
+      const language = getLanguage();
+      if (categorySearchIndex?.language === language) return categorySearchIndex.texts;
+      const texts = {};
+      const probe = document.createElement('div');
+      CATEGORIES.forEach(category => {
+        probe.innerHTML = renderCategory(category.key, pluginPanel);
+        const parts = [category.key, t(category.labelKey), t(category.descriptionKey)];
+        probe.querySelectorAll('[data-search]').forEach(node => parts.push(node.dataset.search || ''));
+        probe.querySelectorAll('.settings-section-title').forEach(node => parts.push(node.textContent || ''));
+        texts[category.key] = parts.join(' ');
+      });
+      categorySearchIndex = { language, texts };
+      return texts;
+    };
+
+    const applySettingsFilter = ({ switchCategory = true } = {}) => {
+      const query = settingsQuery;
+      const texts = categorySearchText();
+      let firstVisibleTab = null;
+      app.querySelectorAll('.settings-tab').forEach(tab => {
+        const match = matchesSettingsQuery(texts[tab.dataset.tab] || '', query);
+        tab.hidden = !match;
+        if (match && !firstVisibleTab) firstVisibleTab = tab;
+      });
+      const noCategoryMatch = Boolean(query) && !firstVisibleTab;
+      if (sidebarEmpty) {
+        sidebarEmpty.hidden = !noCategoryMatch;
+        if (noCategoryMatch) sidebarEmpty.textContent = t('settings.search.empty', { query });
+      }
+
+      const activeTab = app.querySelector(`.settings-tab[data-tab="${activeCategory}"]`);
+      if (switchCategory && query && activeTab?.hidden && firstVisibleTab) {
+        activeCategory = firstVisibleTab.dataset.tab;
+        app.querySelectorAll('.settings-tab').forEach(item => item.classList.toggle('active', item === firstVisibleTab));
+        renderActive();
+        return;
+      }
+
+      // 没有任何分类命中时，内容区整体换成空状态；恢复时重渲染当前分类。
+      if (noCategoryMatch !== searchEmptyContent) {
+        searchEmptyContent = noCategoryMatch;
+        if (noCategoryMatch) {
+          const empty = document.createElement('p');
+          empty.className = 'settings-search-empty';
+          empty.textContent = t('settings.search.empty', { query });
+          content.replaceChildren(empty);
+          return;
+        }
+        renderActive();
+        return;
+      }
+      if (noCategoryMatch) return;
+
+      // 插件面板自带搜索与筛选，不做二次过滤。
+      if (content.querySelector('[data-plugin-panel]')) return;
+
+      content.querySelectorAll('.settings-section, .theme-workbench').forEach(block => {
+        const rows = [...block.querySelectorAll('[data-search]')];
+        if (rows.length) {
+          rows.forEach(row => { row.hidden = !matchesSettingsQuery(row.dataset.search, query); });
+          block.hidden = !rows.some(row => !row.hidden);
+          return;
+        }
+        const title = block.querySelector('.settings-section-title')?.textContent || '';
+        block.hidden = !matchesSettingsQuery(title, query);
+      });
+    };
+
+    // 选择器缩略图直接显示将要应用的应用图标，尺寸和打包图标一致。
+    const hydrateLogoThumbnails = () => {
+      content.querySelectorAll('img[data-logo-thumbnail]').forEach(image => {
+        const logoID = image.dataset.logoThumbnail;
+        void logoApplicationIconDataUrl(logoID)
+          .then(dataURL => {
+            if (image.isConnected) image.src = dataURL;
+          })
+          .catch(error => console.warn('Failed to compose application icon thumbnail:', error));
+      });
+    };
+
     const renderActive = ({ focusPluginSearch = false } = {}) => {
+      hideInfoHint();
       const breadcrumb = app.querySelector('.settings-breadcrumb');
       if (breadcrumb) {
         breadcrumb.querySelector('span').textContent = t('settings.workspace');
@@ -990,6 +1365,7 @@ export function createSettingsModule({
         tab.title = t(category.descriptionKey);
         const label = tab.querySelector('.settings-tab-label');
         if (label) label.textContent = t(category.labelKey);
+        tab.setAttribute('aria-label', `${t(category.labelKey)} · ${t(category.descriptionKey)}`);
       });
       const closeButton = app.querySelector('#settings-close');
       if (closeButton) closeButton.title = t('common.close');
@@ -1004,6 +1380,8 @@ export function createSettingsModule({
         }).catch(() => {});
       }
       lucideIcons();
+      hydrateLogoThumbnails();
+      applySettingsFilter({ switchCategory: false });
       if (focusPluginSearch) {
         const searchInput = content.querySelector('[data-plugin-search]');
         searchInput?.focus();
@@ -1012,9 +1390,18 @@ export function createSettingsModule({
     };
     renderActive();
 
+    const syncSettingsQuery = () => {
+      settingsQuery = String(searchInput?.value || '').trim().toLowerCase();
+      applySettingsFilter();
+    };
+    searchInput?.addEventListener('input', syncSettingsQuery, { signal: eventController.signal });
+    searchInput?.addEventListener('search', syncSettingsQuery, { signal: eventController.signal });
+
     const dispose = () => {
       cancelShortcutCapture?.();
       cancelShortcutCapture = null;
+      clearTimeout(infoTooltipTimer);
+      infoTooltip.remove();
       eventController.abort();
       document.removeEventListener('keydown', escHandler);
     };
@@ -1029,7 +1416,18 @@ export function createSettingsModule({
       renderEditor();
     };
     const escHandler = event => {
-      if (event.key === 'Escape') close();
+      if (infoTooltip.classList.contains('visible')) {
+        hideInfoHint();
+        return;
+      }
+      if (event.key !== 'Escape') return;
+      if (searchInput && searchInput.value) {
+        searchInput.value = '';
+        syncSettingsQuery();
+        searchInput.focus();
+        return;
+      }
+      close();
     };
     document.addEventListener('keydown', escHandler);
     app.querySelector('#settings-close')?.addEventListener('click', close);
@@ -1040,6 +1438,16 @@ export function createSettingsModule({
         activeCategory = tab.dataset.tab;
         app.querySelectorAll('.settings-tab').forEach(item => item.classList.toggle('active', item === tab));
         renderActive();
+        return;
+      }
+
+      const infoHintButton = event.target.closest('.settings-info-hint');
+      if (infoHintButton) {
+        if (activeInfoHint === infoHintButton && infoTooltip.classList.contains('visible')) {
+          hideInfoHint();
+        } else {
+          showInfoHint(infoHintButton);
+        }
         return;
       }
 
@@ -1133,6 +1541,20 @@ export function createSettingsModule({
       if (externalLink && typeof openExternal === 'function') {
         event.preventDefault();
         openExternal(externalLink.href);
+        return;
+      }
+
+      const logoOption = event.target.closest('[data-logo-id]');
+      if (logoOption) {
+        const logoID = logoOption.dataset.logoId;
+        currentSettings.appearance.logo = getLogoOption(logoID).id;
+        app.querySelectorAll('[data-logo-id]').forEach(option => {
+          const active = option.dataset.logoId === currentSettings.appearance.logo;
+          option.classList.toggle('active', active);
+          option.setAttribute('aria-checked', String(active));
+        });
+        applySettings(currentSettings);
+        scheduleSave(status);
         return;
       }
 
@@ -1378,7 +1800,7 @@ export function createSettingsModule({
       setPath(currentSettings, path, value);
       const output = app.querySelector(`[data-range-value="${path}"]`);
       if (output) {
-        const suffix = path === 'appearance.contentWidth' || path === 'files.imageWidth'
+        const suffix = path === 'appearance.contentWidth'
           ? '%'
           : path.includes('Delay') || path.includes('Interval')
             ? 'ms'

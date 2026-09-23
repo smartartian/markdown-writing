@@ -46,3 +46,13 @@ export function getEditableTextOffset(root, node, offset) {
   }
   return range.toString().replace(/\u200B/g, '').length;
 }
+
+export async function renderedHtmlToMarkdown(html, textContent) {
+  const source = String(html || '');
+  const hasRichMarkup = /<(?:strong|em|code|a|img|mark|del|ul|ol|li|blockquote|pre|table)\b/i.test(source);
+  const isPlainParagraph = /^\s*<p(?:\s[^>]*)?>[\s\S]*<\/p>\s*$/i.test(source);
+  if (isPlainParagraph && !hasRichMarkup) {
+    return String(textContent || '').replace(/\u200B/g, '').trimEnd();
+  }
+  return htmlToMarkdown(source);
+}

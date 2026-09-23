@@ -17,8 +17,10 @@ test('language: resolves explicit and system preferences', () => {
 test('language: translation switches immediately', () => {
   applyLanguage('zh-CN');
   assert.equal(t('settings.categories.appearance'), '外观设置');
+  assert.equal(t('settings.brand.title'), '应用图标');
   applyLanguage('en');
   assert.equal(t('settings.categories.appearance'), 'Appearance');
+  assert.equal(t('settings.brand.title'), 'Application Icon');
   assert.equal(getLanguage(), 'en');
-  assert.equal(t('main.lines', { count: 12 }), 'Lines: 12');
+  assert.equal(t('main.stats.lines'), 'Lines');
 });

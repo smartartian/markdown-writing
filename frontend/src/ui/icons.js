@@ -1,6 +1,7 @@
 import {
   createIcons,
   AlignLeft,
+  CircleAlert,
   BookOpen,
   ChevronDown,
   ChevronRight,
@@ -34,6 +35,7 @@ import {
 
 export const APP_ICONS = Object.freeze({
   AlignLeft,
+  CircleAlert,
   BookOpen,
   ChevronDown,
   ChevronRight,

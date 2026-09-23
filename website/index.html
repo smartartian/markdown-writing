@@ -163,9 +163,7 @@
         <div class="scenario-steps" role="group">
           <button class="active" type="button" data-scenario="open"><span>01</span><span data-i18n="scenario.open">打开目录</span></button>
           <button type="button" data-scenario="write"><span>02</span><span data-i18n="scenario.write">开始写作</span></button>
-          <button type="button" data-scenario="conflict"><span>03</span><span data-i18n="scenario.conflict">处理冲突</span></button>
-          <button type="button" data-scenario="history"><span>04</span><span data-i18n="scenario.history">恢复版本</span></button>
-          <button type="button" data-scenario="export"><span>05</span><span data-i18n="scenario.export">导出交付</span></button>
+          <button type="button" data-scenario="export"><span>03</span><span data-i18n="scenario.export">导出交付</span></button>
         </div>
         <button class="scenario-next" type="button" data-scenario-next>
           <span data-i18n="scenario.next">下一步</span>
@@ -217,50 +215,10 @@
               </div>
               <div class="preview-actions">
                 <button class="icon-button" type="button" data-preview-action="find" data-i18n-title="preview.find" title="查找"><i data-lucide="search"></i></button>
-                <button class="icon-button" type="button" data-preview-action="history" data-i18n-title="preview.history" title="版本历史"><i data-lucide="history"></i></button>
                 <button class="icon-button" type="button" data-preview-action="export" data-i18n-title="preview.export" title="导出"><i data-lucide="download"></i></button>
                 <button class="icon-button" type="button" data-preview-action="settings" data-i18n-title="preview.settings" title="设置"><i data-lucide="settings"></i></button>
               </div>
             </header>
-
-            <div class="preview-conflict" id="preview-conflict" hidden>
-              <span class="preview-conflict-icon"><i data-lucide="triangle-alert"></i></span>
-              <div>
-                <strong data-i18n="preview.conflict.title">检测到外部修改</strong>
-                <p data-i18n="preview.conflict.body">磁盘上的文件已被其他程序修改，请选择重新载入或保留当前内容。</p>
-              </div>
-              <div class="preview-conflict-actions">
-                <button type="button" data-conflict-action="reload" data-i18n="preview.conflict.reload">重新载入</button>
-                <button class="primary" type="button" data-conflict-action="keep" data-i18n="preview.conflict.keep">保留本地</button>
-              </div>
-            </div>
-
-            <aside class="preview-drawer preview-history-drawer" id="preview-history-drawer" hidden aria-label="Version history">
-              <header class="preview-drawer-head">
-                <div>
-                  <span class="preview-drawer-kicker" data-i18n="preview.history.kicker">HISTORY</span>
-                  <strong data-i18n="preview.history.title">版本历史</strong>
-                </div>
-                <button class="mini-icon" type="button" data-preview-action="close" aria-label="Close"><i data-lucide="x"></i></button>
-              </header>
-              <div class="preview-version-list">
-                <article class="preview-version active">
-                  <div><strong data-i18n="preview.history.latest">当前版本</strong><span>20:41</span></div>
-                  <p data-i18n="preview.history.latestBody">保存、版本与恢复共享同一条链路</p>
-                  <button type="button" data-restore-version="12" data-i18n="preview.history.current">当前版本</button>
-                </article>
-                <article class="preview-version">
-                  <div><strong>v11</strong><span>20:36</span></div>
-                  <p data-i18n="preview.history.v11">补齐主题与亮暗模式</p>
-                  <button type="button" data-restore-version="11" data-i18n="preview.history.restore">恢复</button>
-                </article>
-                <article class="preview-version">
-                  <div><strong>v10</strong><span>20:28</span></div>
-                  <p data-i18n="preview.history.v10">完成块编辑器改造</p>
-                  <button type="button" data-restore-version="10" data-i18n="preview.history.restore">恢复</button>
-                </article>
-              </div>
-            </aside>
 
             <aside class="preview-drawer preview-settings-drawer" id="preview-settings-drawer" hidden aria-label="Settings">
               <header class="preview-drawer-head">
@@ -322,7 +280,7 @@
               <article class="preview-paper" data-preview-pane="preview">
                 <span class="paper-kicker" data-i18n="preview.today">今天 / 2026.09.19</span>
                 <h2 id="preview-heading" data-preview-doc-heading>把注意力留给正在发生的句子</h2>
-                <p id="preview-subheading" data-preview-doc-body>写作应当接近纸面：打开即写，内容留存在本地。需要时再切换源码、恢复历史版本，或导出成适合分享的格式。</p>
+                <p id="preview-subheading" data-preview-doc-body>写作应当接近纸面：打开即写，内容留存在本地。需要时再切换源码，或导出成适合分享的格式。</p>
                 <blockquote data-i18n="preview.quote">没有堆积的工具栏，只有文字、结构和随时可回看的 Markdown 源文。</blockquote>
                 <ul class="preview-tasks">
                   <li class="done"><i>✓</i><span data-i18n="preview.task1">完成块编辑器改造</span></li>
@@ -492,7 +450,7 @@
         <div class="safety-copy reveal">
           <span class="eyebrow light" data-i18n="safety.eyebrow">数据安全不是附加项</span>
           <h2 data-i18n="safety.title">先保证不丢，再谈功能。</h2>
-          <p data-i18n="safety.lead">从 revision 校验到原子写入，再到版本历史、回收站与崩溃恢复，所有保存路径都围绕同一原则设计：不静默覆盖。</p>
+          <p data-i18n="safety.lead">从原子写入到崩溃恢复，所有写盘路径都围绕同一原则设计：不让内容在写入途中丢失。</p>
           <a class="button button-paper" href="./docs.html">
             <span data-i18n="action.details">查看安全设计</span>
             <i data-lucide="arrow-up-right"></i>
@@ -500,24 +458,14 @@
         </div>
         <div class="safety-grid">
           <article class="safety-card reveal">
-            <i data-lucide="git-compare-arrows"></i>
-            <strong data-i18n="safety.item1.title">Revision 冲突检测</strong>
-            <span data-i18n="safety.item1.body">外部修改不会被静默覆盖。</span>
-          </article>
-          <article class="safety-card reveal">
             <i data-lucide="file-check-2"></i>
             <strong data-i18n="safety.item2.title">原子替换</strong>
             <span data-i18n="safety.item2.body">临时文件写完后替换原文档。</span>
           </article>
           <article class="safety-card reveal">
-            <i data-lucide="history"></i>
-            <strong data-i18n="safety.item3.title">版本历史</strong>
-            <span data-i18n="safety.item3.body">保留最近 50 个自动保存快照。</span>
-          </article>
-          <article class="safety-card reveal">
             <i data-lucide="trash-2"></i>
-            <strong data-i18n="safety.item4.title">回收站恢复</strong>
-            <span data-i18n="safety.item4.body">误删文档可恢复到原路径。</span>
+            <strong data-i18n="safety.item4.title">删除留副本</strong>
+            <span data-i18n="safety.item4.body">删除的文档会先移动到应用数据目录，不会被立即抹除。</span>
           </article>
           <article class="safety-card safety-card-wide reveal">
             <i data-lucide="life-buoy"></i>
