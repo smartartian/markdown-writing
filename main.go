@@ -32,12 +32,15 @@ func main() {
 	app := NewApp()
 	AppMenu := buildAppMenu(app)
 
+	// 默认 1200×800；用户拖过窗口之后，按上次的尺寸打开（存在本地 DB 的 app_state 里）。
+	windowWidth, windowHeight := app.WindowSize()
+
 	err := wails.Run(&options.App{
 		Title:     "Markdown Writing",
-		Width:     1200,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
+		Width:     windowWidth,
+		Height:    windowHeight,
+		MinWidth:  minWindowWidth,
+		MinHeight: minWindowHeight,
 		Menu:      AppMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,

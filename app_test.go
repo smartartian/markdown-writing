@@ -346,3 +346,47 @@ func TestUserPlugins(t *testing.T) {
 		t.Fatal("expected plugin to be deleted")
 	}
 }
+
+func TestParseWindowSizeFallsBackToDefaults(t *testing.T) {
+	cases := []struct {
+		value  string
+		width  int
+		height int
+	}{
+		{"1280x800", 1280, 800},
+		{"1000x640", 1000, 640},
+		{" 960x600 ", 960, 600},
+		{"700x600", 700, 600},
+		{"699x600", defaultWindowWidth, defaultWindowHeight},
+		{"1200x599", defaultWindowWidth, defaultWindowHeight},
+		{"", defaultWindowWidth, defaultWindowHeight},
+		{"garbage", defaultWindowWidth, defaultWindowHeight},
+		{"0x0", defaultWindowWidth, defaultWindowHeight},
+	}
+	for _, tc := range cases {
+		width, height := parseWindowSize(tc.value)
+		if width != tc.width || height != tc.height {
+			t.Fatalf("parseWindowSize(%q) = %dx%d; want %dx%d", tc.value, width, height, tc.width, tc.height)
+		}
+	}
+}
+
+func TestWindowSizeUsesRememberedValue(t *testing.T) {
+	db, err := NewDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db}
+
+	if width, height := app.WindowSize(); width != defaultWindowWidth || height != defaultWindowHeight {
+		t.Fatalf("no record: WindowSize() = %dx%d; want %dx%d", width, height, defaultWindowWidth, defaultWindowHeight)
+	}
+
+	if err := db.SetState(windowSizeStateKey, "1024x680"); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+	if width, height := app.WindowSize(); width != 1024 || height != 680 {
+		t.Fatalf("remembered: WindowSize() = %dx%d; want 1024x680", width, height)
+	}
+}

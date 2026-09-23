@@ -84,6 +84,7 @@ const {
   loadRecoveryState: LoadRecoveryState,
   clearRecoveryState: ClearRecoveryState,
   setPendingChanges: SetPendingChanges,
+  rememberWindowSize: RememberWindowSize,
   confirmClose: ConfirmClose,
 } = storage;
 
@@ -3677,6 +3678,13 @@ async function init() {
   // 菜单栏保存事件监听（Wails 开发模式热重载时可能失败）
   try { EventsOn('menu:save', () => { saveCurrentDoc(false); }); } catch (e) {}
   try { EventsOn('menu:saveas', () => { saveCurrentDoc(true); }); } catch (e) {}
+
+  // 记住窗口尺寸：拖动窗口后防抖上报给主进程，下次启动按上次的尺寸打开（见 main.go 的 WindowSize）。
+  if (!isBrowserMode()) {
+    window.addEventListener('resize', debounce(() => {
+      void Promise.resolve(RememberWindowSize()).catch(() => {});
+    }, 400));
+  }
 
   window.addEventListener('beforeunload', (event) => {
     if (!state.isDirty) return;

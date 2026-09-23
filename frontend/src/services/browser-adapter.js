@@ -478,5 +478,7 @@ export const browserAdapter = {
   // 浏览器预览没有程序坞：不设置应用图标，缩进比例也交给 brand.js 的兜底值。
   setApplicationIcon: async () => false,
   setPendingChanges: async () => {},
+  // 浏览器预览没有原生窗口，尺寸记忆交给浏览器自己处理。
+  rememberWindowSize: async () => null,
   confirmClose: async () => {},
 };

@@ -43,5 +43,6 @@ export const wailsAdapter = {
   clearRecoveryState: () => WailsApp.ClearRecoveryState(),
   setApplicationIcon: dataURL => WailsApp.SetApplicationIcon(dataURL),
   setPendingChanges: (count, summary) => WailsApp.SetPendingChanges(count, summary),
+  rememberWindowSize: () => WailsApp.RememberWindowSize(),
   confirmClose: () => WailsApp.ConfirmClose(),
 };

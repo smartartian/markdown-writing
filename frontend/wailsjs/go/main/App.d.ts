@@ -56,6 +56,8 @@ export function ReadDocument(arg1:string):Promise<string>;
 
 export function ReadImageAsset(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function RememberWindowSize():Promise<void>;
+
 export function RenameDocument(arg1:string,arg2:string):Promise<main.Document>;
 
 export function RestoreRecycleItem(arg1:number):Promise<void>;
@@ -83,6 +85,8 @@ export function SelectDocumentDir():Promise<string>;
 export function SetApplicationIcon(arg1:string):Promise<void>;
 
 export function SetPendingChanges(arg1:number,arg2:string):Promise<void>;
+
+export function WindowSize():Promise<number|number>;
 
 export function WriteDocument(arg1:string,arg2:string):Promise<void>;
 

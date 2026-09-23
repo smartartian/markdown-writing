@@ -110,6 +110,10 @@ export function ReadImageAsset(arg1, arg2, arg3) {
   return window['go']['main']['App']['ReadImageAsset'](arg1, arg2, arg3);
 }
 
+export function RememberWindowSize() {
+  return window['go']['main']['App']['RememberWindowSize']();
+}
+
 export function RenameDocument(arg1, arg2) {
   return window['go']['main']['App']['RenameDocument'](arg1, arg2);
 }
@@ -164,6 +168,10 @@ export function SetApplicationIcon(arg1) {
 
 export function SetPendingChanges(arg1, arg2) {
   return window['go']['main']['App']['SetPendingChanges'](arg1, arg2);
+}
+
+export function WindowSize() {
+  return window['go']['main']['App']['WindowSize']();
 }
 
 export function WriteDocument(arg1, arg2) {

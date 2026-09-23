@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -758,7 +759,62 @@ func (a *App) ConfirmClose() {
 	}
 }
 
+// ---- 窗口尺寸记忆 ----
+// 首次启动用默认尺寸；之后按用户上次拖出来的尺寸打开（见 main.go 里的 Width/Height）。
+// 记的是窗口 frame，和 main.go 的 Width/Height 是同一个度量，这样来回不会因为可视区/外框差几像素而漂移。
+const (
+	defaultWindowWidth  = 1200
+	defaultWindowHeight = 800
+	minWindowWidth      = 700
+	minWindowHeight     = 600
+)
+
+const windowSizeStateKey = "windowSize"
+
+// WindowSize 返回上次记住的窗口尺寸；没有记录或记录不合法时回退到默认尺寸。
+func (a *App) WindowSize() (int, int) {
+	if a.db == nil {
+		return defaultWindowWidth, defaultWindowHeight
+	}
+	stored, err := a.db.GetState(windowSizeStateKey)
+	if err != nil {
+		return defaultWindowWidth, defaultWindowHeight
+	}
+	return parseWindowSize(stored)
+}
+
+// RememberWindowSize 记住当前窗口尺寸，供下次启动使用。
+func (a *App) RememberWindowSize() error {
+	if a.ctx == nil || a.db == nil {
+		return nil
+	}
+	width, height := runtime.WindowGetSize(a.ctx)
+	// 最小化、切换全屏的中间态可能报 0 或异常值，不能用它覆盖用户设定的尺寸。
+	if width < minWindowWidth || height < minWindowHeight {
+		return nil
+	}
+	return a.db.SetState(windowSizeStateKey, fmt.Sprintf("%dx%d", width, height))
+}
+
+// parseWindowSize 解析 "1280x800"；不合法或小于最小尺寸时回退到默认尺寸。
+func parseWindowSize(value string) (int, int) {
+	parts := strings.Split(strings.TrimSpace(value), "x")
+	if len(parts) != 2 {
+		return defaultWindowWidth, defaultWindowHeight
+	}
+	width, errWidth := strconv.Atoi(strings.TrimSpace(parts[0]))
+	height, errHeight := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errWidth != nil || errHeight != nil || width < minWindowWidth || height < minWindowHeight {
+		return defaultWindowWidth, defaultWindowHeight
+	}
+	return width, height
+}
+
 func (a *App) beforeClose(ctx context.Context) bool {
+	// 关闭前再记一次：拖拽窗口后的防抖上报可能还没落库。
+	if err := a.RememberWindowSize(); err != nil {
+		println("remember window size:", err.Error())
+	}
 	a.closeMu.Lock()
 	hasPending := a.pending > 0
 	summary := a.pendingID
