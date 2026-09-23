@@ -23,7 +23,7 @@ import { parseMarkdown } from './editor-core/parser/block-parser.js';
 import { createEditorSession } from './editor-core/session/index.js';
 import { serializeDocument } from './editor-core/serializer/markdown-serializer.js';
 import { createParserWorkerClient } from './editor-core/worker/index.js';
-import { scheduleShadowComparison } from './editor-core/shadow/shadow-mode.js';
+
 import {
   createEditorCore,
   createMarkdownSeparatorBlock,
@@ -266,6 +266,15 @@ const compositionController = createCompositionController({
 
 const editorCommands = createBuiltinCommands();
 const parserWorker = createParserWorkerClient();
+async function scheduleEditorShadowComparison(markdown) {
+  if (!import.meta.env.DEV) return;
+  try {
+    const { scheduleShadowComparison } = await import('./dev-tools/markdown-shadow/markdown-shadow.js');
+    scheduleShadowComparison(markdown);
+  } catch (error) {
+    console.warn('Editor shadow comparison unavailable:', error);
+  }
+}
 
 // 重新渲染块编辑器（保留当前激活块的位置）
 function refreshBlockEditor() {
@@ -2944,7 +2953,7 @@ function restoreBlockSelection() {
 function scheduleAutoSave() {
   clearTimeout(autoSaveTimer);
   void safety.persistRecoverySnapshot();
-  scheduleShadowComparison(getCurrentMd());
+  void scheduleEditorShadowComparison(getCurrentMd());
   void parserWorker.compare(getCurrentMd()).then(result => {
     const editor = qs('#block-editor');
     if (editor && result) editor.dataset.workerRoundtrip = String(result.exact);

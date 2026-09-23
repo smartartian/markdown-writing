@@ -1,7 +1,7 @@
 import { marked } from 'marked';
 import { parseMarkdownBlocksLegacy } from '../../modules/legacy-parser.js';
-import { parseMarkdown } from '../parser/block-parser.js';
-import { serializeDocument } from '../serializer/markdown-serializer.js';
+import { parseMarkdown } from '../../editor-core/parser/block-parser.js';
+import { serializeDocument } from '../../editor-core/serializer/markdown-serializer.js';
 
 let shadowTimer = null;
 let lastComparedSource = null;

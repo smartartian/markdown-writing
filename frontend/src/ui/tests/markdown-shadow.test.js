@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compareMarkdownCore } from '../index.js';
+import { compareMarkdownCore } from '../../dev-tools/markdown-shadow/markdown-shadow.js';
 
 const fixtures = [
   '# Heading\n\nParagraph text.',

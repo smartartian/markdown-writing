@@ -7,7 +7,7 @@ import {
   parseMarkdownBlocksWithCore,
   parseMarkdownBlocksWithFallback,
 } from '../../modules/editor.js';
-import { createEditorSession, parseMarkdown, serializeDocument } from '../index.js';
+import { createEditorSession, parseMarkdown, serializeDocument } from '../../editor-core/index.js';
 
 const fixtures = [
   '# Heading\n\nParagraph',

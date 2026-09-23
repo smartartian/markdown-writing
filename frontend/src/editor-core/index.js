@@ -58,11 +58,6 @@ export {
   serializeInline,
 } from './serializer/markdown-serializer.js';
 export {
-  compareMarkdownCore,
-  getLastShadowReport,
-  scheduleShadowComparison,
-} from './shadow/shadow-mode.js';
-export {
   AppliedTransaction,
   Transaction,
   TransactionConflictError,
